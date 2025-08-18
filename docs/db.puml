@@ -1,7 +1,6 @@
 @startuml
 !define table(x) class x << (T,#FFAAAA) >>
 
-' Включаем ортогональные линии
 skinparam linetype ortho
 
 table(users) {
@@ -43,21 +42,24 @@ table(messages) {
     created_at : TIMESTAMP    
 }
 
-table(group_keys) {
-    <u>chat_id</u>
-    <u>user_id</u>
-    encrypted_key : TEXT
-    updated_at : TIMESTAMP
+table(message_keys) {
+    <u>id</u> : UUID
+    message_id : UUID
+    recipient_id : UUID
+    encrypted_symmetric_key : TEXT
+    created_at : TIMESTAMP
 }
 
+' Связи
 users "1" -down-> "0..*" chats : created_by
 users "1" -down-> "0..*" chat_members : user_uuid
 users "1" -down-> "0..*" messages : sender_id
-users "1" -down-> "0..*" group_keys : user_id
+users "1" -down-> "0..*" message_keys : recipient_id
 
 chats "1" -down-> "0..*" chat_members : chat_uuid
 chats "1" -down-> "0..*" messages : chat_id
-chats "1" -down-> "0..*" group_keys : chat_id
 chats "1" -down-> "1" chat_types : type_id
+
+messages "1" -down-> "0..*" message_keys : message_id
 
 @enduml
