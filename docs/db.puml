@@ -50,16 +50,25 @@ table(message_keys) {
     created_at : TIMESTAMP
 }
 
+table(message_reads) {
+    <u>id</u> : UUID
+    message_id : UUID
+    user_id : UUID
+    read_at : TIMESTAMP
+}
+
 ' Связи
 users "1" -down-> "0..*" chats : created_by
 users "1" -down-> "0..*" chat_members : user_uuid
 users "1" -down-> "0..*" messages : sender_id
 users "1" -down-> "0..*" message_keys : recipient_id
+users "1" -down-> "0..*" message_reads : user_id
 
 chats "1" -down-> "0..*" chat_members : chat_uuid
 chats "1" -down-> "0..*" messages : chat_id
 chats "1" -down-> "1" chat_types : type_id
 
 messages "1" -down-> "0..*" message_keys : message_id
+messages "1" -down-> "0..*" message_reads : message_id
 
 @enduml
