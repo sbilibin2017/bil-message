@@ -1,0 +1,33 @@
+@startuml
+actor Sender as User1
+actor Recipient1 as User2
+actor Recipient2 as User3
+participant "Client Sender" as Client1
+participant "Server" as Server
+participant "Client Recipient1" as Client2
+participant "Client Recipient2" as Client3
+database "Messages DB" as DB
+database "Message Keys DB" as KeysDB
+
+User1 -> Client1 : Вводит текст сообщения
+Client1 -> Client1 : Генерирует симметрический ключ
+Client1 -> Client1 : Шифрует сообщение симметрическим ключом
+
+Client1 -> Client1 : Для каждого участника:\nШифрует ключ публичным ключом получателя
+Client1 -> Server : Отправка зашифрованного сообщения и всех зашифрованных ключей
+Server -> DB : Сохраняет зашифрованное сообщение
+Server -> KeysDB : Сохраняет зашифрованные ключи для всех участников
+
+Server -> Client2 : Уведомление о новом сообщении
+Server -> Client3 : Уведомление о новом сообщении
+
+Client2 -> Client2 : Расшифровывает симметрический ключ приватным ключом
+Client2 -> Client2 : Расшифровывает сообщение
+Client2 -> User2 : Отображает текст сообщения
+
+Client3 -> Client3 : Расшифровывает симметрический ключ приватным ключом
+Client3 -> Client3 : Расшифровывает сообщение
+Client3 -> User3 : Отображает текст сообщения
+
+Server -> Client1 : Подтверждение успешной отправки
+@enduml

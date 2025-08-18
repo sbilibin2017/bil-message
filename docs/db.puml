@@ -6,6 +6,7 @@ skinparam linetype ortho
 table(users) {
     <u>user_uuid</u> : UUID
     username : VARCHAR(50)
+    nickname : VARCHAR(50)
     password_hash : VARCHAR(255)
     public_key : TEXT
     created_at : TIMESTAMP
