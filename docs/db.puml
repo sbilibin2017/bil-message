@@ -1,0 +1,63 @@
+@startuml
+!define table(x) class x << (T,#FFAAAA) >>
+
+' Включаем ортогональные линии
+skinparam linetype ortho
+
+table(users) {
+    <u>user_uuid</u> : UUID
+    username : VARCHAR(50)
+    password_hash : VARCHAR(255)
+    public_key : TEXT
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+table(chat_types) {
+    <u>chat_type_uuid</u> : UUID
+    name : VARCHAR(50)
+    description : TEXT
+}
+
+table(chats) {
+    <u>chat_uuid</u> : UUID
+    name : VARCHAR(100)
+    type_id : UUID
+    created_by : UUID
+    created_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+table(chat_members) {
+    <u>chat_uuid</u>
+    <u>user_uuid</u>
+    role : VARCHAR(20)
+    joined_at : TIMESTAMP
+}
+
+table(messages) {
+    <u>message_uuid</u> : UUID
+    chat_id : UUID
+    sender_id : UUID
+    encrypted_text : TEXT
+    created_at : TIMESTAMP    
+}
+
+table(group_keys) {
+    <u>chat_id</u>
+    <u>user_id</u>
+    encrypted_key : TEXT
+    updated_at : TIMESTAMP
+}
+
+users "1" -down-> "0..*" chats : created_by
+users "1" -down-> "0..*" chat_members : user_uuid
+users "1" -down-> "0..*" messages : sender_id
+users "1" -down-> "0..*" group_keys : user_id
+
+chats "1" -down-> "0..*" chat_members : chat_uuid
+chats "1" -down-> "0..*" messages : chat_id
+chats "1" -down-> "0..*" group_keys : chat_id
+chats "1" -down-> "1" chat_types : type_id
+
+@enduml
