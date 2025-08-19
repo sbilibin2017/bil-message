@@ -1,3 +1,4 @@
+
 -- +goose Up
 CREATE TABLE chat_members (
     chat_member_uuid UUID PRIMARY KEY,

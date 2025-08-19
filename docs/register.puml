@@ -2,11 +2,17 @@
 actor User
 participant "Auth Service" as Auth
 database "DB" as DB
+participant "JWT Generator" as JWT
 
 User -> Auth : Вводит username, password
-Auth -> DB : Проверяет уникальность username
-DB --> Auth : username доступен
-Auth -> DB : Сохраняет нового пользователя {user_uuid, username, password_hash, public_key, created_at, updated_at}
-DB --> Auth : Подтверждение сохранения
-Auth --> User : Регистрация успешна, показать подтверждение
+Auth -> DB : Проверяет существование username
+DB --> Auth : Существующий пользователь или nil
+
+Auth -> Auth : Генерирует userUUID и clientUUID
+Auth -> Auth : Хэширует пароль
+Auth -> DB : Сохраняет пользователя 
+DB --> Auth : Подтверждение сохранения пользователя
+Auth -> JWT : Генерирует токен для clientUUID и userUUID
+JWT --> Auth : JWT token
+Auth --> User : Возвращает token
 @enduml

@@ -54,7 +54,7 @@ func RegisterHandler(
 		}
 
 		// Вызываем регистрацию
-		token, err := reg.Register(context.Background(), req.Username, req.Password)
+		token, err := reg.Register(r.Context(), req.Username, req.Password)
 		if err != nil {
 			if errors.Is(err, services.ErrUserAlreadyExists) {
 				w.WriteHeader(http.StatusConflict)

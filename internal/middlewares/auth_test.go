@@ -2,14 +2,12 @@ package middlewares
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/golang/mock/gomock"
-
-	"github.com/sbilibin2017/bil-message/internal/models"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -19,64 +17,59 @@ func TestAuthMiddleware(t *testing.T) {
 
 	mockParser := NewMockTokenParser(ctrl)
 
+	nextHandlerCalled := false
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		nextHandlerCalled = true
+
+		// Проверяем, что контекст содержит UUID после SetToContext
+		userUUID, clientUUID := r.Context().Value("user").([2]uuid.UUID)[0], r.Context().Value("user").([2]uuid.UUID)[1]
+		assert.Equal(t, uuid.MustParse("11111111-1111-1111-1111-111111111111"), userUUID)
+		assert.Equal(t, uuid.MustParse("22222222-2222-2222-2222-222222222222"), clientUUID)
 	})
 
-	t.Run("missing token", func(t *testing.T) {
-		mockParser.EXPECT().GetFromRequest(gomock.Any()).Return("", errors.New("no token"))
+	middleware := AuthMiddleware(mockParser)
 
-		req := httptest.NewRequest("GET", "/", nil)
-		rec := httptest.NewRecorder()
+	t.Run("success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
 
-		handler := AuthMiddleware(mockParser)(nextHandler)
-		handler.ServeHTTP(rec, req)
+		mockParser.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockParser.EXPECT().Parse("token").Return(
+			uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+			nil,
+		)
+		mockParser.EXPECT().SetToContext(req.Context(),
+			uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		).Return(context.WithValue(req.Context(), "user", [2]uuid.UUID{
+			uuid.MustParse("11111111-1111-1111-1111-111111111111"),
+			uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		}))
 
-		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+		rr := httptest.NewRecorder()
+		middleware(nextHandler).ServeHTTP(rr, req)
+
+		assert.True(t, nextHandlerCalled)
 	})
 
-	t.Run("invalid token", func(t *testing.T) {
-		mockParser.EXPECT().GetFromRequest(gomock.Any()).Return("token", nil)
-		mockParser.EXPECT().Parse("token").Return(nil, errors.New("invalid"))
+	t.Run("GetFromRequest fails", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		mockParser.EXPECT().GetFromRequest(req).Return("", assert.AnError)
 
-		req := httptest.NewRequest("GET", "/", nil)
-		rec := httptest.NewRecorder()
+		rr := httptest.NewRecorder()
+		middleware(nextHandler).ServeHTTP(rr, req)
 
-		handler := AuthMiddleware(mockParser)(nextHandler)
-		handler.ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 	})
 
-	t.Run("context error", func(t *testing.T) {
-		payload := &models.TokenPayload{}
-		mockParser.EXPECT().GetFromRequest(gomock.Any()).Return("token", nil)
-		mockParser.EXPECT().Parse("token").Return(payload, nil)
-		mockParser.EXPECT().SetToContext(gomock.Any(), payload).Return(context.Background(), errors.New("context error"))
+	t.Run("Parse fails", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		mockParser.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockParser.EXPECT().Parse("token").Return(uuid.Nil, uuid.Nil, assert.AnError)
 
-		req := httptest.NewRequest("GET", "/", nil)
-		rec := httptest.NewRecorder()
+		rr := httptest.NewRecorder()
+		middleware(nextHandler).ServeHTTP(rr, req)
 
-		handler := AuthMiddleware(mockParser)(nextHandler)
-		handler.ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusUnauthorized, rec.Code)
-	})
-
-	t.Run("successful request", func(t *testing.T) {
-		payload := &models.TokenPayload{}
-		ctx := context.WithValue(context.Background(), "user", payload)
-
-		mockParser.EXPECT().GetFromRequest(gomock.Any()).Return("token", nil)
-		mockParser.EXPECT().Parse("token").Return(payload, nil)
-		mockParser.EXPECT().SetToContext(gomock.Any(), payload).Return(ctx, nil)
-
-		req := httptest.NewRequest("GET", "/", nil)
-		rec := httptest.NewRecorder()
-
-		handler := AuthMiddleware(mockParser)(nextHandler)
-		handler.ServeHTTP(rec, req)
-
-		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, http.StatusUnauthorized, rr.Code)
 	})
 }

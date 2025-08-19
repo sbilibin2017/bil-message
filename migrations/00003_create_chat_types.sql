@@ -1,3 +1,4 @@
+
 -- +goose Up
 CREATE TABLE chat_types (
     chat_type_uuid UUID PRIMARY KEY,

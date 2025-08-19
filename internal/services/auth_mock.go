@@ -88,43 +88,6 @@ func (mr *MockUserWriterMockRecorder) Save(ctx, userUUID, username, passwordHash
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockUserWriter)(nil).Save), ctx, userUUID, username, passwordHash)
 }
 
-// MockClientWriter is a mock of ClientWriter interface.
-type MockClientWriter struct {
-	ctrl     *gomock.Controller
-	recorder *MockClientWriterMockRecorder
-}
-
-// MockClientWriterMockRecorder is the mock recorder for MockClientWriter.
-type MockClientWriterMockRecorder struct {
-	mock *MockClientWriter
-}
-
-// NewMockClientWriter creates a new mock instance.
-func NewMockClientWriter(ctrl *gomock.Controller) *MockClientWriter {
-	mock := &MockClientWriter{ctrl: ctrl}
-	mock.recorder = &MockClientWriterMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockClientWriter) EXPECT() *MockClientWriterMockRecorder {
-	return m.recorder
-}
-
-// Save mocks base method.
-func (m *MockClientWriter) Save(ctx context.Context, clientUUID, userUUID uuid.UUID, publicKey string) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, clientUUID, userUUID, publicKey)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Save indicates an expected call of Save.
-func (mr *MockClientWriterMockRecorder) Save(ctx, clientUUID, userUUID, publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockClientWriter)(nil).Save), ctx, clientUUID, userUUID, publicKey)
-}
-
 // MockTokenGenerator is a mock of TokenGenerator interface.
 type MockTokenGenerator struct {
 	ctrl     *gomock.Controller

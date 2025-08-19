@@ -1,4 +1,4 @@
-package services
+package services_test
 
 import (
 	"context"
@@ -7,60 +7,96 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/sbilibin2017/bil-message/internal/models"
+	"github.com/sbilibin2017/bil-message/internal/services"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestUserWriteService_Register(t *testing.T) {
+func TestAuthService_Register(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockUR := NewMockUserReader(ctrl)
-	mockUW := NewMockUserWriter(ctrl)
-	mockCW := NewMockClientWriter(ctrl)
-	mockTG := NewMockTokenGenerator(ctrl)
+	mockReader := services.NewMockUserReader(ctrl)
+	mockWriter := services.NewMockUserWriter(ctrl)
+	mockToken := services.NewMockTokenGenerator(ctrl)
 
-	svc := NewAuthService(mockUR, mockUW, mockCW, mockTG)
+	svc := services.NewAuthService(mockReader, mockWriter, mockToken)
 
-	t.Run("success", func(t *testing.T) {
-		username := "testuser"
-		password := "secret"
-		token := "jwt-token"
+	ctx := context.Background()
 
-		// Expect user not to exist
-		mockUR.EXPECT().Get(gomock.Any(), username).Return(nil, nil)
-		// Expect Save user
-		mockUW.EXPECT().Save(gomock.Any(), gomock.Any(), username, gomock.Any()).Return(nil)
-		// Expect Save client
-		mockCW.EXPECT().Save(gomock.Any(), gomock.Any(), gomock.Any(), "").Return(nil)
-		// Expect Generate token
-		mockTG.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(token, nil)
+	tests := []struct {
+		name          string
+		username      string
+		password      string
+		setupMocks    func()
+		expectedError error
+	}{
+		{
+			name:     "successful registration",
+			username: "alice",
+			password: "password123",
+			setupMocks: func() {
+				mockReader.EXPECT().Get(ctx, "alice").Return(nil, nil)
+				mockWriter.EXPECT().Save(ctx, gomock.Any(), "alice", gomock.Any()).Return(nil)
+				mockToken.EXPECT().Generate(gomock.Any(), gomock.Any()).Return("token123", nil)
+			},
+			expectedError: nil,
+		},
+		{
+			name:     "user already exists",
+			username: "bob",
+			password: "password123",
+			setupMocks: func() {
+				mockReader.EXPECT().Get(ctx, "bob").Return(&models.UserDB{}, nil)
+			},
+			expectedError: services.ErrUserAlreadyExists,
+		},
+		{
+			name:     "reader returns error",
+			username: "charlie",
+			password: "password123",
+			setupMocks: func() {
+				mockReader.EXPECT().Get(ctx, "charlie").Return(nil, errors.New("db error"))
+			},
+			expectedError: errors.New("db error"),
+		},
+		{
+			name:     "writer returns error",
+			username: "dave",
+			password: "password123",
+			setupMocks: func() {
+				mockReader.EXPECT().Get(ctx, "dave").Return(nil, nil)
+				mockWriter.EXPECT().Save(ctx, gomock.Any(), "dave", gomock.Any()).Return(errors.New("save error"))
+			},
+			expectedError: errors.New("save error"),
+		},
+		{
+			name:     "token generator returns error",
+			username: "eve",
+			password: "password123",
+			setupMocks: func() {
+				mockReader.EXPECT().Get(ctx, "eve").Return(nil, nil)
+				mockWriter.EXPECT().Save(ctx, gomock.Any(), "eve", gomock.Any()).Return(nil)
+				mockToken.EXPECT().Generate(gomock.Any(), gomock.Any()).Return("", errors.New("token error"))
+			},
+			expectedError: errors.New("token error"),
+		},
+	}
 
-		tk, err := svc.Register(context.Background(), username, password)
-		assert.NoError(t, err)
-		assert.Equal(t, token, tk)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupMocks != nil {
+				tt.setupMocks()
+			}
 
-	t.Run("user exists", func(t *testing.T) {
-		username := "existinguser"
-		password := "secret"
+			token, err := svc.Register(ctx, tt.username, tt.password)
 
-		mockUR.EXPECT().Get(gomock.Any(), username).Return(&models.UserDB{}, nil)
-
-		tk, err := svc.Register(context.Background(), username, password)
-		assert.Error(t, err)
-		assert.EqualError(t, err, "user already exists")
-		assert.Empty(t, tk)
-	})
-
-	t.Run("Get error", func(t *testing.T) {
-		username := "user"
-		password := "pass"
-
-		mockUR.EXPECT().Get(gomock.Any(), username).Return(nil, errors.New("db error"))
-
-		tk, err := svc.Register(context.Background(), username, password)
-		assert.Error(t, err)
-		assert.EqualError(t, err, "db error")
-		assert.Empty(t, tk)
-	})
+			if tt.expectedError != nil {
+				assert.EqualError(t, err, tt.expectedError.Error())
+				assert.Empty(t, token)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEmpty(t, token)
+			}
+		})
+	}
 }

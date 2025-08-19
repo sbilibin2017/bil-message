@@ -2,8 +2,8 @@
 CREATE TABLE chats (
     chat_uuid UUID PRIMARY KEY,
     name VARCHAR(100),
-    type_id UUID NOT NULL REFERENCES chat_types(chat_type_uuid),
-    created_by UUID NOT NULL REFERENCES users(user_uuid),
+    type_uuid UUID NOT NULL REFERENCES chat_types(chat_type_uuid),
+    created_by_uuid UUID NOT NULL REFERENCES users(user_uuid),
     created_at TIMESTAMP DEFAULT now() NOT NULL,
     updated_at TIMESTAMP DEFAULT now() NOT NULL
 );

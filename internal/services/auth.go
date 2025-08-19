@@ -24,12 +24,6 @@ type UserWriter interface {
 	Save(ctx context.Context, userUUID uuid.UUID, username string, passwordHash string) error
 }
 
-// ClientWriter определяет интерфейс для сохранения данных клиента (связка пользователь + публичный ключ).
-type ClientWriter interface {
-	// Save сохраняет клиента с заданным UUID, UUID пользователя и публичным ключом.
-	Save(ctx context.Context, clientUUID uuid.UUID, userUUID uuid.UUID, publicKey string) error
-}
-
 // TokenGenerator определяет интерфейс для генерации токенов.
 type TokenGenerator interface {
 	// Generate создает токен для указанного клиента и пользователя.
@@ -40,7 +34,6 @@ type TokenGenerator interface {
 type AuthService struct {
 	ur UserReader
 	uw UserWriter
-	cw ClientWriter
 	tg TokenGenerator
 }
 
@@ -48,18 +41,16 @@ type AuthService struct {
 func NewAuthService(
 	ur UserReader,
 	uw UserWriter,
-	cw ClientWriter,
 	tg TokenGenerator,
 ) *AuthService {
 	return &AuthService{
 		ur: ur,
 		uw: uw,
-		cw: cw,
 		tg: tg,
 	}
 }
 
-// Register создаёт нового пользователя, клиента с RSA ключами и возвращает токен.
+// Register создаёт нового пользователя, клиента с RSA ключами и возвращает токен и приватный ключ.
 func (svc *AuthService) Register(
 	ctx context.Context,
 	username string,
@@ -85,13 +76,8 @@ func (svc *AuthService) Register(
 	userUUID := uuid.New()
 	clientUUID := uuid.New()
 
-	// 4. Сохраняем пользователя
+	// 5. Сохраняем пользователя
 	if err := svc.uw.Save(ctx, userUUID, username, passwordHash); err != nil {
-		return "", err
-	}
-
-	// 5. Сохраняем клиента с публичным ключом
-	if err := svc.cw.Save(ctx, clientUUID, userUUID, ""); err != nil {
 		return "", err
 	}
 
@@ -101,6 +87,6 @@ func (svc *AuthService) Register(
 		return "", err
 	}
 
-	// 8. Возвращаем токен и приватный ключ
+	// 8. Возвращаем токен и приватный ключ пользователю
 	return token, nil
 }

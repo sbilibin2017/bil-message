@@ -5,34 +5,55 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/sbilibin2017/bil-message/internal/models"
 )
 
-// contextKey — собственный тип для ключей в контексте, чтобы избежать коллизий.
 type contextKey string
 
 const userCtxKey contextKey = "user"
 
 // JWT представляет работу с JWT-токенами.
 type JWT struct {
-	SecretKey []byte
+	secretKey []byte
+	exp       time.Duration
 }
 
-// New создаёт новый экземпляр JWT с указанным секретным ключом.
-func New(secretKey string) *JWT {
-	return &JWT{
-		SecretKey: []byte(secretKey),
+// New создаёт новый JWT с указанным секретным ключом и временем жизни токена.
+func New(secretKey string, exp time.Duration) (*JWT, error) {
+	if secretKey == "" {
+		return nil, errors.New("secret key cannot be empty")
 	}
+	if exp <= 0 {
+		exp = time.Hour
+	}
+	return &JWT{
+		secretKey: []byte(secretKey),
+		exp:       exp,
+	}, nil
 }
 
-// claimsStruct — приватная структура для хранения claims JWT.
 type claimsStruct struct {
 	UserUUID   string `json:"user_uuid"`
 	ClientUUID string `json:"client_uuid"`
 	jwt.RegisteredClaims
+}
+
+// Generate создаёт JWT токен на основе userUUID и clientUUID.
+func (j *JWT) Generate(userUUID uuid.UUID, clientUUID uuid.UUID) (string, error) {
+	claims := claimsStruct{
+		UserUUID:   userUUID.String(),
+		ClientUUID: clientUUID.String(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(j.exp)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString(j.secretKey)
 }
 
 // GetFromRequest извлекает JWT токен из заголовка Authorization запроса.
@@ -50,49 +71,49 @@ func (j *JWT) GetFromRequest(r *http.Request) (string, error) {
 	return parts[1], nil
 }
 
-// Parse проверяет токен и возвращает его payload в виде TokenPayload.
-func (j *JWT) Parse(tokenString string) (*models.TokenPayload, error) {
+// Parse проверяет токен и возвращает userUUID и clientUUID.
+func (j *JWT) Parse(tokenString string) (userUUID uuid.UUID, clientUUID uuid.UUID, err error) {
 	claims := &claimsStruct{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, errors.New("unexpected signing method")
 		}
-		return j.SecretKey, nil
+		return j.secretKey, nil
 	})
 	if err != nil || !token.Valid {
-		return nil, errors.New("invalid token")
+		return uuid.Nil, uuid.Nil, errors.New("invalid token")
 	}
 
-	userUUID, err := uuid.Parse(claims.UserUUID)
+	userUUID, err = uuid.Parse(claims.UserUUID)
 	if err != nil {
-		return nil, err
+		return uuid.Nil, uuid.Nil, err
 	}
 
-	clientUUID, err := uuid.Parse(claims.ClientUUID)
+	clientUUID, err = uuid.Parse(claims.ClientUUID)
 	if err != nil {
-		return nil, err
+		return uuid.Nil, uuid.Nil, err
 	}
 
-	return &models.TokenPayload{
-		UserUUID:   userUUID,
-		ClientUUID: clientUUID,
-	}, nil
+	return userUUID, clientUUID, nil
 }
 
-// SetToContext сохраняет payload в контекст запроса для дальнейшего использования.
-func (j *JWT) SetToContext(ctx context.Context, payload *models.TokenPayload) (context.Context, error) {
-	if payload == nil {
-		return ctx, errors.New("payload is nil")
-	}
-	return context.WithValue(ctx, userCtxKey, payload), nil
+// SetToContext сохраняет userUUID и clientUUID напрямую в контекст.
+func (j *JWT) SetToContext(ctx context.Context, userUUID uuid.UUID, clientUUID uuid.UUID) context.Context {
+	return context.WithValue(ctx, userCtxKey, [2]uuid.UUID{userUUID, clientUUID})
 }
 
-// GetTokenPayloadFromContext извлекает TokenPayload из контекста.
-func (j *JWT) GetTokenPayloadFromContext(ctx context.Context) (*models.TokenPayload, error) {
-	payload, ok := ctx.Value(userCtxKey).(*models.TokenPayload)
-	if !ok || payload == nil {
-		return nil, errors.New("no token payload in context")
+// GetTokenPayloadFromContext извлекает userUUID и clientUUID напрямую из контекста.
+func (j *JWT) GetTokenPayloadFromContext(ctx context.Context) (userUUID uuid.UUID, clientUUID uuid.UUID, err error) {
+	value := ctx.Value(userCtxKey)
+	if value == nil {
+		return uuid.Nil, uuid.Nil, errors.New("no token payload in context")
 	}
-	return payload, nil
+
+	uuids, ok := value.([2]uuid.UUID)
+	if !ok {
+		return uuid.Nil, uuid.Nil, errors.New("invalid token payload type")
+	}
+
+	return uuids[0], uuids[1], nil
 }
