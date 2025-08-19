@@ -2,11 +2,11 @@
 !define table(x) class x << (T,#FFAAAA) >>
 
 skinparam linetype ortho
+left to right direction
 
 table(users) {
     <u>user_uuid</u> : UUID
-    username : VARCHAR(50)
-    nickname : VARCHAR(50)
+    username : VARCHAR(50)    
     password_hash : VARCHAR(255)
     public_key : TEXT
     created_at : TIMESTAMP
@@ -15,7 +15,7 @@ table(users) {
 
 table(chat_types) {
     <u>chat_type_uuid</u> : UUID
-    name : VARCHAR(50)
+    name : VARCHAR(50) ' "private", "group"
     description : TEXT
 }
 
@@ -29,8 +29,9 @@ table(chats) {
 }
 
 table(chat_members) {
-    <u>chat_uuid</u>
-    <u>user_uuid</u>
+    <u>chat_member_uuid</u> : UUID
+    chat_uuid : UUID
+    user_uuid : UUID
     role : VARCHAR(20)
     joined_at : TIMESTAMP
 }
@@ -44,7 +45,7 @@ table(messages) {
 }
 
 table(message_keys) {
-    <u>id</u> : UUID
+    <u>message_key_uuid</u> : UUID
     message_id : UUID
     recipient_id : UUID
     encrypted_symmetric_key : TEXT
@@ -52,7 +53,7 @@ table(message_keys) {
 }
 
 table(message_reads) {
-    <u>id</u> : UUID
+    <u>message_read_uuid</u> : UUID
     message_id : UUID
     user_id : UUID
     read_at : TIMESTAMP
