@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/sbilibin2017/bil-message/internal/services"
 )
 
@@ -26,7 +27,7 @@ type RegisterRequest struct {
 
 // Registerer определяет интерфейс для регистрации пользователя и получения JWT токена.
 type Registerer interface {
-	Register(ctx context.Context, username string, password string) (token string, err error)
+	Register(ctx context.Context, username string, password string) (userUUID uuid.UUID, err error)
 }
 
 // RegisterHandler обрабатывает регистрацию пользователя и возвращает токен в заголовке.
@@ -54,7 +55,7 @@ func RegisterHandler(
 		}
 
 		// Вызываем регистрацию
-		token, err := reg.Register(r.Context(), req.Username, req.Password)
+		userUUID, err := reg.Register(r.Context(), req.Username, req.Password)
 		if err != nil {
 			if errors.Is(err, services.ErrUserAlreadyExists) {
 				w.WriteHeader(http.StatusConflict)
@@ -64,8 +65,9 @@ func RegisterHandler(
 			return
 		}
 
-		// Устанавливаем токен в заголовок Authorization
-		w.Header().Set("Authorization", "Bearer "+token)
+		// Устанавливаем Content-Type и возвращаем UUID в plain text
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(userUUID.String()))
 	}
 }

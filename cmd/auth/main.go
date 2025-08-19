@@ -109,7 +109,7 @@ func run(
 	}
 
 	// Создание сервиса аутентификации
-	authService := services.NewAuthService(userReadRepo, userWriteRepo, jwt)
+	authService := services.NewAuthService(userReadRepo, userWriteRepo)
 
 	// Инициализация HTTP-хендлеров
 	authHandler := handlers.RegisterHandler(authService)

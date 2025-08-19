@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sbilibin2017/bil-message/internal/configs/db"
 	"github.com/stretchr/testify/assert"
@@ -223,29 +224,27 @@ func runMigrations(ctx context.Context, conn *sqlx.DB) error {
 	return nil
 }
 
-// Тесты регистрации
-// Тесты регистрации
 func (s *AuthSuite) TestRegisterSuccess() {
 	resp, err := s.httpClient.R().
 		SetBody(map[string]string{
 			"username": "newuser",
 			"password": "Password123!",
 		}).
-		Post("/auth/register") // <- исправлено на фактический путь
-
+		Post("/auth/register")
 	s.Require().NoError(err)
+
+	// Проверяем статус
 	s.Equal(http.StatusOK, resp.StatusCode())
 
-	authHeader := resp.Header().Get("Authorization")
-	s.NotEmpty(authHeader)
-	s.Contains(authHeader, "Bearer ")
-
-	// Проверяем, что тело не пустое
-	s.Empty(resp.Body())
+	// UUID должен быть в теле
+	body := resp.String()
+	s.NotEmpty(body)
+	_, parseErr := uuid.Parse(body)
+	s.NoError(parseErr)
 }
 
 func (s *AuthSuite) TestRegisterDuplicate() {
-	// Сначала создаём пользователя
+	// Создаем пользователя
 	resp1, err := s.httpClient.R().
 		SetBody(map[string]string{
 			"username": "duplicateuser",
@@ -255,7 +254,7 @@ func (s *AuthSuite) TestRegisterDuplicate() {
 	s.Require().NoError(err)
 	s.Equal(http.StatusOK, resp1.StatusCode())
 
-	// Повторная регистрация должна вернуть 409
+	// Попытка создать того же пользователя снова
 	resp2, err := s.httpClient.R().
 		SetBody(map[string]string{
 			"username": "duplicateuser",
@@ -264,6 +263,9 @@ func (s *AuthSuite) TestRegisterDuplicate() {
 		Post("/auth/register")
 	s.Require().NoError(err)
 	s.Equal(http.StatusConflict, resp2.StatusCode())
+
+	// Тело должно быть пустым
+	s.Empty(resp2.Body())
 }
 
 func (s *AuthSuite) TestRegisterInvalidBody() {
@@ -272,6 +274,9 @@ func (s *AuthSuite) TestRegisterInvalidBody() {
 		Post("/auth/register")
 	s.Require().NoError(err)
 	s.Equal(http.StatusBadRequest, resp.StatusCode())
+
+	// Тело должно быть пустым
+	s.Empty(resp.Body())
 }
 
 func TestAuthSuite(t *testing.T) {
