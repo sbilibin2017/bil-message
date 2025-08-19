@@ -1,16 +1,18 @@
 @startuml
-participant "Backend API" as API
-participant "Database" as DB
+actor User
+participant "Auth Service" as Auth
+database "DB" as DB
+participant "JWT Generator" as JWT
 
-== Регистрация пользователя на сервере ==
-API -> API: Получить данные для регистрации (username, пароль)
-API -> API: Проверить, что username уникален
-API -> API: Сгенерировать хэш пароля
-API -> API: Сгенерировать пару ключей RSA (public/private)
-API -> DB: Создать новую запись пользователя с публичным ключом и хэшем пароля
-DB --> API: Подтверждение создания пользователя
-API -> API: Сгенерировать токен аутентификации для пользователя
-API -> API: Логирование события регистрации
-API --> API: Подготовка начальных данных (чаты, роли и т.п.)
-API --> User: Вернуть приватный ключ и токен
+User -> Auth : Вводит username, password
+Auth -> DB : Проверяет существование username
+DB --> Auth : Существующий пользователь или nil
+
+Auth -> Auth : Генерирует userUUID и clientUUID
+Auth -> Auth : Хэширует пароль
+Auth -> DB : Сохраняет пользователя 
+DB --> Auth : Подтверждение сохранения пользователя
+Auth -> JWT : Генерирует токен для clientUUID и userUUID
+JWT --> Auth : JWT token
+Auth --> User : Возвращает token
 @enduml
