@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"github.com/sbilibin2017/bil-message/internal/models"
 	"github.com/sbilibin2017/bil-message/internal/services"
 	"github.com/stretchr/testify/assert"
@@ -17,11 +18,8 @@ func TestAuthService_Register(t *testing.T) {
 
 	mockReader := services.NewMockUserReader(ctrl)
 	mockWriter := services.NewMockUserWriter(ctrl)
-	mockToken := services.NewMockTokenGenerator(ctrl)
 
-	svc := services.NewAuthService(mockReader, mockWriter, mockToken)
-
-	ctx := context.Background()
+	svc := services.NewAuthService(mockReader, mockWriter)
 
 	tests := []struct {
 		name          string
@@ -32,53 +30,55 @@ func TestAuthService_Register(t *testing.T) {
 	}{
 		{
 			name:     "successful registration",
-			username: "alice",
+			username: "newuser",
 			password: "password123",
 			setupMocks: func() {
-				mockReader.EXPECT().Get(ctx, "alice").Return(nil, nil)
-				mockWriter.EXPECT().Save(ctx, gomock.Any(), "alice", gomock.Any()).Return(nil)
-				mockToken.EXPECT().Generate(gomock.Any(), gomock.Any()).Return("token123", nil)
+				mockReader.EXPECT().
+					Get(gomock.Any(), "newuser").
+					Return(nil, nil)
+
+				mockWriter.EXPECT().
+					Save(gomock.Any(), gomock.Any(), "newuser", gomock.Any()).
+					Return(nil)
 			},
 			expectedError: nil,
 		},
 		{
 			name:     "user already exists",
-			username: "bob",
+			username: "existinguser",
 			password: "password123",
 			setupMocks: func() {
-				mockReader.EXPECT().Get(ctx, "bob").Return(&models.UserDB{}, nil)
+				mockReader.EXPECT().
+					Get(gomock.Any(), "existinguser").
+					Return(&models.UserDB{}, nil)
 			},
 			expectedError: services.ErrUserAlreadyExists,
 		},
 		{
 			name:     "reader returns error",
-			username: "charlie",
+			username: "erroruser",
 			password: "password123",
 			setupMocks: func() {
-				mockReader.EXPECT().Get(ctx, "charlie").Return(nil, errors.New("db error"))
+				mockReader.EXPECT().
+					Get(gomock.Any(), "erroruser").
+					Return(nil, errors.New("db error"))
 			},
 			expectedError: errors.New("db error"),
 		},
 		{
 			name:     "writer returns error",
-			username: "dave",
+			username: "newuser2",
 			password: "password123",
 			setupMocks: func() {
-				mockReader.EXPECT().Get(ctx, "dave").Return(nil, nil)
-				mockWriter.EXPECT().Save(ctx, gomock.Any(), "dave", gomock.Any()).Return(errors.New("save error"))
+				mockReader.EXPECT().
+					Get(gomock.Any(), "newuser2").
+					Return(nil, nil)
+
+				mockWriter.EXPECT().
+					Save(gomock.Any(), gomock.Any(), "newuser2", gomock.Any()).
+					Return(errors.New("save error"))
 			},
 			expectedError: errors.New("save error"),
-		},
-		{
-			name:     "token generator returns error",
-			username: "eve",
-			password: "password123",
-			setupMocks: func() {
-				mockReader.EXPECT().Get(ctx, "eve").Return(nil, nil)
-				mockWriter.EXPECT().Save(ctx, gomock.Any(), "eve", gomock.Any()).Return(nil)
-				mockToken.EXPECT().Generate(gomock.Any(), gomock.Any()).Return("", errors.New("token error"))
-			},
-			expectedError: errors.New("token error"),
 		},
 	}
 
@@ -88,14 +88,14 @@ func TestAuthService_Register(t *testing.T) {
 				tt.setupMocks()
 			}
 
-			token, err := svc.Register(ctx, tt.username, tt.password)
-
+			userUUID, err := svc.Register(context.Background(), tt.username, tt.password)
 			if tt.expectedError != nil {
-				assert.EqualError(t, err, tt.expectedError.Error())
-				assert.Empty(t, token)
+				assert.Error(t, err)
+				assert.Equal(t, tt.expectedError.Error(), err.Error())
+				assert.Equal(t, uuid.Nil, userUUID)
 			} else {
 				assert.NoError(t, err)
-				assert.NotEmpty(t, token)
+				assert.NotEqual(t, uuid.Nil, userUUID)
 			}
 		})
 	}

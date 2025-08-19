@@ -1,4 +1,4 @@
-package handlers
+package handlers_test
 
 import (
 	"bytes"
@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
+	"github.com/sbilibin2017/bil-message/internal/handlers"
 	"github.com/sbilibin2017/bil-message/internal/services"
 	"github.com/stretchr/testify/assert"
 )
@@ -16,61 +18,78 @@ func TestRegisterHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRegisterer := NewMockRegisterer(ctrl)
+	mockRegisterer := handlers.NewMockRegisterer(ctrl)
 
-	t.Run("successful registration", func(t *testing.T) {
-		reqBody := []byte(`{"username":"user1","password":"Secret123!"}`)
-		req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(reqBody))
-		w := httptest.NewRecorder()
+	tests := []struct {
+		name           string
+		requestBody    string
+		setupMock      func()
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:        "success",
+			requestBody: `{"username":"user1","password":"pass1"}`,
+			setupMock: func() {
+				mockRegisterer.EXPECT().
+					Register(gomock.Any(), "user1", "pass1").
+					Return(uuid.MustParse("11111111-1111-1111-1111-111111111111"), nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   "11111111-1111-1111-1111-111111111111",
+		},
+		{
+			name:        "user already exists",
+			requestBody: `{"username":"user1","password":"pass1"}`,
+			setupMock: func() {
+				mockRegisterer.EXPECT().
+					Register(gomock.Any(), "user1", "pass1").
+					Return(uuid.Nil, services.ErrUserAlreadyExists)
+			},
+			expectedStatus: http.StatusConflict,
+			expectedBody:   "",
+		},
+		{
+			name:           "invalid json",
+			requestBody:    `{"username":"user1","password":`,
+			setupMock:      func() {},
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   "",
+		},
+		{
+			name:        "internal error",
+			requestBody: `{"username":"user1","password":"pass1"}`,
+			setupMock: func() {
+				mockRegisterer.EXPECT().
+					Register(gomock.Any(), "user1", "pass1").
+					Return(uuid.Nil, errors.New("db error"))
+			},
+			expectedStatus: http.StatusInternalServerError,
+			expectedBody:   "",
+		},
+	}
 
-		mockRegisterer.EXPECT().
-			Register(gomock.Any(), "user1", "Secret123!").
-			Return("token123", nil)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupMock()
 
-		handler := RegisterHandler(mockRegisterer)
-		handler.ServeHTTP(w, req)
+			req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(tt.requestBody))
+			w := httptest.NewRecorder()
 
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Equal(t, "Bearer token123", w.Header().Get("Authorization"))
-	})
+			handler := handlers.RegisterHandler(mockRegisterer)
+			handler.ServeHTTP(w, req)
 
-	t.Run("user already exists", func(t *testing.T) {
-		reqBody := []byte(`{"username":"user2","password":"Secret123!"}`)
-		req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(reqBody))
-		w := httptest.NewRecorder()
+			resp := w.Result()
+			defer resp.Body.Close()
 
-		mockRegisterer.EXPECT().
-			Register(gomock.Any(), "user2", "Secret123!").
-			Return("", services.ErrUserAlreadyExists)
+			buf := new(bytes.Buffer)
+			buf.ReadFrom(resp.Body)
 
-		handler := RegisterHandler(mockRegisterer)
-		handler.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusConflict, w.Code)
-	})
-
-	t.Run("bad request", func(t *testing.T) {
-		req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader([]byte("not-json")))
-		w := httptest.NewRecorder()
-
-		handler := RegisterHandler(mockRegisterer)
-		handler.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-
-	t.Run("internal server error", func(t *testing.T) {
-		reqBody := []byte(`{"username":"user3","password":"Secret123!"}`)
-		req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(reqBody))
-		w := httptest.NewRecorder()
-
-		mockRegisterer.EXPECT().
-			Register(gomock.Any(), "user3", "Secret123!").
-			Return("", errors.New("some error"))
-
-		handler := RegisterHandler(mockRegisterer)
-		handler.ServeHTTP(w, req)
-
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
-	})
+			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
+			if tt.expectedStatus == http.StatusOK {
+				assert.Equal(t, "text/plain; charset=utf-8", resp.Header.Get("Content-Type"))
+			}
+			assert.Equal(t, tt.expectedBody, buf.String())
+		})
+	}
 }
