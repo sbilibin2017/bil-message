@@ -14,11 +14,14 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestRegisterHandler(t *testing.T) {
+func TestDeviceRegisterHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRegisterer := handlers.NewMockRegisterer(ctrl)
+	mockRegisterer := handlers.NewMockDeviceRegisterer(ctrl)
+
+	validUserUUID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+	validDeviceUUID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
 	tests := []struct {
 		name           string
@@ -29,40 +32,47 @@ func TestRegisterHandler(t *testing.T) {
 	}{
 		{
 			name:        "success",
-			requestBody: `{"username":"user1","password":"pass1"}`,
+			requestBody: `{"user_uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","public_key":"ssh-rsa AAAAB3Nza..."}`,
 			setupMock: func() {
 				mockRegisterer.EXPECT().
-					Register(gomock.Any(), "user1", "pass1").
-					Return(uuid.MustParse("11111111-1111-1111-1111-111111111111"), nil)
+					Register(gomock.Any(), validUserUUID, "ssh-rsa AAAAB3Nza...").
+					Return(&validDeviceUUID, nil)
 			},
 			expectedStatus: http.StatusOK,
-			expectedBody:   "11111111-1111-1111-1111-111111111111",
+			expectedBody:   "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
 		},
 		{
-			name:        "user already exists",
-			requestBody: `{"username":"user1","password":"pass1"}`,
+			name:        "user not found",
+			requestBody: `{"user_uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","public_key":"ssh-rsa AAAAB3Nza..."}`,
 			setupMock: func() {
 				mockRegisterer.EXPECT().
-					Register(gomock.Any(), "user1", "pass1").
-					Return(uuid.Nil, internalErrors.ErrUserAlreadyExists)
+					Register(gomock.Any(), validUserUUID, "ssh-rsa AAAAB3Nza...").
+					Return(nil, internalErrors.ErrUserNotFound)
 			},
-			expectedStatus: http.StatusConflict,
+			expectedStatus: http.StatusNotFound,
 			expectedBody:   "",
 		},
 		{
 			name:           "invalid json",
-			requestBody:    `{"username":"user1","password":`,
+			requestBody:    `{"user_uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","public_key":`,
+			setupMock:      func() {},
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   "",
+		},
+		{
+			name:           "invalid uuid",
+			requestBody:    `{"user_uuid":"not-a-uuid","public_key":"ssh-rsa AAAAB3Nza..."}`,
 			setupMock:      func() {},
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   "",
 		},
 		{
 			name:        "internal error",
-			requestBody: `{"username":"user1","password":"pass1"}`,
+			requestBody: `{"user_uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","public_key":"ssh-rsa AAAAB3Nza..."}`,
 			setupMock: func() {
 				mockRegisterer.EXPECT().
-					Register(gomock.Any(), "user1", "pass1").
-					Return(uuid.Nil, errors.New("db error"))
+					Register(gomock.Any(), validUserUUID, "ssh-rsa AAAAB3Nza...").
+					Return(nil, errors.New("db error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
 			expectedBody:   "",
@@ -73,10 +83,10 @@ func TestRegisterHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setupMock()
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(tt.requestBody))
+			req := httptest.NewRequest(http.MethodPost, "/devices/register", bytes.NewBufferString(tt.requestBody))
 			w := httptest.NewRecorder()
 
-			handler := handlers.RegisterHandler(mockRegisterer)
+			handler := handlers.DeviceRegisterHandler(mockRegisterer)
 			handler.ServeHTTP(w, req)
 
 			resp := w.Result()

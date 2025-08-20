@@ -3,11 +3,11 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
+
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/sbilibin2017/bil-message/internal/services"
+	"github.com/sbilibin2017/bil-message/internal/errors"
 )
 
 // RegisterRequest определяет входящий запрос на регистрацию пользователя.
@@ -57,12 +57,15 @@ func RegisterHandler(
 		// Вызываем регистрацию
 		userUUID, err := reg.Register(r.Context(), req.Username, req.Password)
 		if err != nil {
-			if errors.Is(err, services.ErrUserAlreadyExists) {
+			switch err {
+			case errors.ErrUserAlreadyExists:
 				w.WriteHeader(http.StatusConflict)
 				return
+			default:
+				w.WriteHeader(http.StatusInternalServerError)
+				return
 			}
-			w.WriteHeader(http.StatusInternalServerError)
-			return
+
 		}
 
 		// Устанавливаем Content-Type и возвращаем UUID в plain text

@@ -45,8 +45,8 @@ func NewUserReadRepository(db *sqlx.DB) *UserReadRepository {
 	return &UserReadRepository{db: db}
 }
 
-// Get возвращает пользователя по username.
-func (r *UserReadRepository) Get(
+// GetByUsername возвращает пользователя по username.
+func (r *UserReadRepository) GetByUsername(
 	ctx context.Context,
 	username string,
 ) (*models.UserDB, error) {
@@ -59,5 +59,26 @@ func (r *UserReadRepository) Get(
 		}
 		return nil, err
 	}
+	return &user, nil
+}
+
+// GetByUUID возвращает пользователя по userUUID.
+func (r *UserReadRepository) GetByUUID(
+	ctx context.Context,
+	userUUID uuid.UUID,
+) (*models.UserDB, error) {
+	var user models.UserDB
+	query := `SELECT user_uuid, username, password_hash, created_at, updated_at 
+	          FROM users 
+	          WHERE user_uuid = $1`
+
+	err := r.db.GetContext(ctx, &user, query, userUUID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
 	return &user, nil
 }

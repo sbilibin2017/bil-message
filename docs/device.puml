@@ -1,0 +1,14 @@
+@startuml
+actor User
+participant "Device Service" as Device
+database "DB" as DB
+
+User -> Device : Отправляет userUUID
+Device -> DB : Проверяет существование userUUID
+DB --> Device : существующий пользователь
+Device -> Device : Генерирует deviceUUID
+Device -> DB : Сохраняет новое устройство {deviceUUID, userUUID}
+DB --> Device : Подтверждение сохранения
+Device --> User : deviceUUID
+
+@enduml

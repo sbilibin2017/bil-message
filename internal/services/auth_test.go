@@ -7,6 +7,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	internalErrors "github.com/sbilibin2017/bil-message/internal/errors"
 	"github.com/sbilibin2017/bil-message/internal/models"
 	"github.com/sbilibin2017/bil-message/internal/services"
 	"github.com/stretchr/testify/assert"
@@ -34,7 +35,7 @@ func TestAuthService_Register(t *testing.T) {
 			password: "password123",
 			setupMocks: func() {
 				mockReader.EXPECT().
-					Get(gomock.Any(), "newuser").
+					GetByUsername(gomock.Any(), "newuser").
 					Return(nil, nil)
 
 				mockWriter.EXPECT().
@@ -49,10 +50,10 @@ func TestAuthService_Register(t *testing.T) {
 			password: "password123",
 			setupMocks: func() {
 				mockReader.EXPECT().
-					Get(gomock.Any(), "existinguser").
+					GetByUsername(gomock.Any(), "existinguser").
 					Return(&models.UserDB{}, nil)
 			},
-			expectedError: services.ErrUserAlreadyExists,
+			expectedError: internalErrors.ErrUserAlreadyExists,
 		},
 		{
 			name:     "reader returns error",
@@ -60,7 +61,7 @@ func TestAuthService_Register(t *testing.T) {
 			password: "password123",
 			setupMocks: func() {
 				mockReader.EXPECT().
-					Get(gomock.Any(), "erroruser").
+					GetByUsername(gomock.Any(), "erroruser").
 					Return(nil, errors.New("db error"))
 			},
 			expectedError: errors.New("db error"),
@@ -71,7 +72,7 @@ func TestAuthService_Register(t *testing.T) {
 			password: "password123",
 			setupMocks: func() {
 				mockReader.EXPECT().
-					Get(gomock.Any(), "newuser2").
+					GetByUsername(gomock.Any(), "newuser2").
 					Return(nil, nil)
 
 				mockWriter.EXPECT().
