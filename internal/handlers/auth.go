@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/google/uuid"
+	"github.com/sbilibin2017/bil-message/internal/configs/log"
 	"github.com/sbilibin2017/bil-message/internal/errors"
 )
 
@@ -62,6 +63,7 @@ func RegisterHandler(
 				w.WriteHeader(http.StatusConflict)
 				return
 			default:
+				log.Log("user register", err)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -72,5 +74,74 @@ func RegisterHandler(
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(userUUID.String()))
+	}
+}
+
+// LoginRequest определяет входящий запрос на аутентификацию пользователя.
+// swagger:model LoginRequest
+type LoginRequest struct {
+	// Имя пользователя
+	// required: true
+	// example: johndoe
+	// default: user123
+	Username string `json:"username"`
+	// Пароль пользователя
+	// required: true
+	// example: Secret123!
+	// default: P@ssw0rd
+	Password string `json:"password"`
+	// UUID устройства пользователя
+	// required: true
+	// example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+	DeviceUUID uuid.UUID `json:"device_uuid"`
+}
+
+// LoginRequest определяет интерфейс для регистрации пользователя и получения JWT токена.
+type Loginer interface {
+	Login(ctx context.Context, username string, password string, deviceUUID uuid.UUID) (token string, err error)
+}
+
+// LoginHandler обрабатывает аутентификацию пользователя и возвращает JWT токен в заголовке Authorization.
+// @Summary      Вход пользователя
+// @Description  Проверяет пользователя и устройство, возвращает JWT токен в заголовке Authorization: Bearer <token>.
+// @Tags         auth
+// @Accept       json
+// @Produce      json
+// @Param        request body handlers.LoginRequest true "Запрос на вход пользователя"
+// @Success      200 {string} string "Успешная аутентификация, токен в заголовке Authorization"
+// @Failure      400 {string} string "Неверный запрос или невалидные данные"
+// @Failure      401 {string} string "Пользователь не найден, неверный пароль или устройство не найдено"
+// @Failure      500 {string} string "Внутренняя ошибка сервера"
+// @Router       /auth/login [post]
+func LoginHandler(
+	loginer Loginer,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req LoginRequest
+
+		// Декодируем JSON-запрос
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Вызываем метод логина
+		token, err := loginer.Login(r.Context(), req.Username, req.Password, req.DeviceUUID)
+		if err != nil {
+			log.Log("user login", err)
+			switch err {
+			case errors.ErrUserNotFound, errors.ErrInvalidPassword, errors.ErrDeviceNotFound:
+				w.WriteHeader(http.StatusUnauthorized) // 401 для ошибок аутентификации
+				return
+			default:
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// Устанавливаем токен в заголовок Authorization
+		w.Header().Set("Authorization", "Bearer "+token)
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
 	}
 }

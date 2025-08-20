@@ -21,7 +21,6 @@ import (
 )
 
 func TestPrintBuildInfo(t *testing.T) {
-	// Перенаправим stdout в буфер
 	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
@@ -44,7 +43,6 @@ func TestPrintBuildInfo(t *testing.T) {
 }
 
 func TestParseFlags(t *testing.T) {
-	// Сохраним оригинальные os.Args
 	origArgs := os.Args
 	defer func() { os.Args = origArgs }()
 
@@ -64,17 +62,15 @@ func TestParseFlags(t *testing.T) {
 }
 
 func TestRunWithSQLite(t *testing.T) {
-	// Используем SQLite in-memory для теста
 	driver := "sqlite"
-	dsn := ":memory:"     // только :memory:, без sqlite://
-	addr := "127.0.0.1:0" // случайный порт
+	dsn := ":memory:"
+	addr := "127.0.0.1:0"
 	jwtKey := "testkey"
 	jwtExpiration := time.Hour
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// Запускаем сервер в отдельной горутине, чтобы не блокировать тест
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- run(ctx, driver, dsn, addr, jwtKey, jwtExpiration)
@@ -82,7 +78,6 @@ func TestRunWithSQLite(t *testing.T) {
 
 	select {
 	case <-ctx.Done():
-		// таймаут
 	case err := <-errCh:
 		assert.NoError(t, err)
 	}
@@ -93,12 +88,12 @@ type AuthSuite struct {
 	postgresC  tc.Container
 	serverURL  string
 	httpClient *resty.Client
+	dbConn     *sqlx.DB
 }
 
 func (s *AuthSuite) SetupSuite() {
 	ctx := context.Background()
 
-	// запускаем postgres
 	req := tc.ContainerRequest{
 		Image:        "postgres:16-alpine",
 		ExposedPorts: []string{"5432/tcp"},
@@ -123,12 +118,12 @@ func (s *AuthSuite) SetupSuite() {
 
 	dsn := fmt.Sprintf("postgres://bil_message_user:bil_message_password@%s:%s/bil_message_db?sslmode=disable", host, port.Port())
 
-	// подключаемся к БД
-	conn, err := db.New("pgx", dsn)
+	// подключаемся к БД один раз
+	s.dbConn, err = db.New("pgx", dsn)
 	s.Require().NoError(err)
 
-	// запускаем миграции напрямую
-	s.Require().NoError(runMigrations(ctx, conn))
+	// запускаем миграции
+	s.Require().NoError(runMigrations(ctx, s.dbConn))
 
 	// запускаем сервер
 	s.serverURL = "http://127.0.0.1:18080"
@@ -138,7 +133,7 @@ func (s *AuthSuite) SetupSuite() {
 			"pgx",
 			dsn,
 			"127.0.0.1:18080",
-			"test-jwt-secret", // <- ключ JWT
+			"test-jwt-secret",
 			1*time.Hour,
 		)
 		if err != nil && err != http.ErrServerClosed {
@@ -156,7 +151,6 @@ func (s *AuthSuite) TearDownSuite() {
 	}
 }
 
-// runMigrations выполняет все миграции напрямую через SQL
 func runMigrations(ctx context.Context, conn *sqlx.DB) error {
 	migrations := []string{
 		`CREATE TABLE IF NOT EXISTS users (
@@ -224,6 +218,8 @@ func runMigrations(ctx context.Context, conn *sqlx.DB) error {
 	return nil
 }
 
+// --------------------------- Tests ---------------------------
+
 func (s *AuthSuite) TestRegisterSuccess() {
 	resp, err := s.httpClient.R().
 		SetBody(map[string]string{
@@ -232,11 +228,8 @@ func (s *AuthSuite) TestRegisterSuccess() {
 		}).
 		Post("/auth/register")
 	s.Require().NoError(err)
-
-	// Проверяем статус
 	s.Equal(http.StatusOK, resp.StatusCode())
 
-	// UUID должен быть в теле
 	body := resp.String()
 	s.NotEmpty(body)
 	_, parseErr := uuid.Parse(body)
@@ -244,7 +237,6 @@ func (s *AuthSuite) TestRegisterSuccess() {
 }
 
 func (s *AuthSuite) TestRegisterDuplicate() {
-	// Создаем пользователя
 	resp1, err := s.httpClient.R().
 		SetBody(map[string]string{
 			"username": "duplicateuser",
@@ -254,7 +246,6 @@ func (s *AuthSuite) TestRegisterDuplicate() {
 	s.Require().NoError(err)
 	s.Equal(http.StatusOK, resp1.StatusCode())
 
-	// Попытка создать того же пользователя снова
 	resp2, err := s.httpClient.R().
 		SetBody(map[string]string{
 			"username": "duplicateuser",
@@ -263,8 +254,6 @@ func (s *AuthSuite) TestRegisterDuplicate() {
 		Post("/auth/register")
 	s.Require().NoError(err)
 	s.Equal(http.StatusConflict, resp2.StatusCode())
-
-	// Тело должно быть пустым
 	s.Empty(resp2.Body())
 }
 
@@ -274,9 +263,74 @@ func (s *AuthSuite) TestRegisterInvalidBody() {
 		Post("/auth/register")
 	s.Require().NoError(err)
 	s.Equal(http.StatusBadRequest, resp.StatusCode())
-
-	// Тело должно быть пустым
 	s.Empty(resp.Body())
+}
+
+func (s *AuthSuite) TestLoginSuccess() {
+	username := "user123"
+	password := "P@ssw0rd"
+
+	// Регистрация пользователя
+	respRegister, err := s.httpClient.R().
+		SetBody(map[string]string{
+			"username": username,
+			"password": password,
+		}).
+		Post("/auth/register")
+	s.Require().NoError(err)
+	s.Require().Equal(200, respRegister.StatusCode())
+
+	userUUID := respRegister.String() // uuid из тела ответа
+
+	// Генерируем UUID устройства
+	deviceUUID := uuid.New()
+
+	// Вставляем устройство в базу
+	_, err = s.dbConn.Exec(`
+        INSERT INTO devices (device_uuid, user_uuid, public_key, created_at, updated_at)
+        VALUES ($1, $2, $3, NOW(), NOW())
+    `, deviceUUID, userUUID, "test-public-key")
+	s.Require().NoError(err)
+
+	// Логин пользователя с device_uuid
+	respLogin, err := s.httpClient.R().
+		SetBody(map[string]string{
+			"username":    username,
+			"password":    password,
+			"device_uuid": deviceUUID.String(),
+		}).
+		Post("/auth/login")
+	s.Require().NoError(err)
+	s.Require().Equal(200, respLogin.StatusCode())
+
+	authHeader := respLogin.Header().Get("Authorization")
+	s.Require().NotEmpty(authHeader)
+	s.Require().Contains(authHeader, "Bearer ")
+}
+
+func (s *AuthSuite) TestLoginWrongPassword() {
+	username := "wrongpassuser"
+	password := "Password123!"
+	wrongPassword := "WrongPassword!"
+
+	respReg, err := s.httpClient.R().
+		SetBody(map[string]string{
+			"username": username,
+			"password": password,
+		}).
+		Post("/auth/register")
+	s.Require().NoError(err)
+	s.Equal(http.StatusOK, respReg.StatusCode())
+
+	respLogin, err := s.httpClient.R().
+		SetBody(map[string]string{
+			"username": username,
+			"password": wrongPassword,
+		}).
+		Post("/auth/login")
+	s.Require().NoError(err)
+	s.Equal(http.StatusUnauthorized, respLogin.StatusCode())
+	s.Empty(respLogin.Body())
 }
 
 func TestAuthSuite(t *testing.T) {

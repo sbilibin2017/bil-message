@@ -49,3 +49,41 @@ func (mr *MockRegistererMockRecorder) Register(ctx, username, password interface
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Register", reflect.TypeOf((*MockRegisterer)(nil).Register), ctx, username, password)
 }
+
+// MockLoginer is a mock of Loginer interface.
+type MockLoginer struct {
+	ctrl     *gomock.Controller
+	recorder *MockLoginerMockRecorder
+}
+
+// MockLoginerMockRecorder is the mock recorder for MockLoginer.
+type MockLoginerMockRecorder struct {
+	mock *MockLoginer
+}
+
+// NewMockLoginer creates a new mock instance.
+func NewMockLoginer(ctrl *gomock.Controller) *MockLoginer {
+	mock := &MockLoginer{ctrl: ctrl}
+	mock.recorder = &MockLoginerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockLoginer) EXPECT() *MockLoginerMockRecorder {
+	return m.recorder
+}
+
+// Login mocks base method.
+func (m *MockLoginer) Login(ctx context.Context, username, password string, deviceUUID uuid.UUID) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Login", ctx, username, password, deviceUUID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Login indicates an expected call of Login.
+func (mr *MockLoginerMockRecorder) Login(ctx, username, password, deviceUUID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Login", reflect.TypeOf((*MockLoginer)(nil).Login), ctx, username, password, deviceUUID)
+}

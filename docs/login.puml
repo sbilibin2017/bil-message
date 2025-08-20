@@ -1,0 +1,16 @@
+@startuml
+actor User
+participant "Auth Service" as Auth
+database "DB" as DB
+
+User -> Auth : Отправляет JSON {username, password, deviceUUID}
+Auth -> DB : Находит пользователя по username
+DB --> Auth : Пользователь найден / nil
+
+Auth -> Auth : Проверяет пароль
+Auth -> DB : Проверяет deviceUUID
+DB --> Auth : Устройство найдено / не найдено
+
+Auth -> Auth : Генерирует JWT токен
+Auth --> User : JWT токен в заголовке Authorization
+@enduml
