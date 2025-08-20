@@ -87,3 +87,79 @@ func (mr *MockUserWriterMockRecorder) Save(ctx, userUUID, username, passwordHash
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockUserWriter)(nil).Save), ctx, userUUID, username, passwordHash)
 }
+
+// MockDeviceReader is a mock of DeviceReader interface.
+type MockDeviceReader struct {
+	ctrl     *gomock.Controller
+	recorder *MockDeviceReaderMockRecorder
+}
+
+// MockDeviceReaderMockRecorder is the mock recorder for MockDeviceReader.
+type MockDeviceReaderMockRecorder struct {
+	mock *MockDeviceReader
+}
+
+// NewMockDeviceReader creates a new mock instance.
+func NewMockDeviceReader(ctrl *gomock.Controller) *MockDeviceReader {
+	mock := &MockDeviceReader{ctrl: ctrl}
+	mock.recorder = &MockDeviceReaderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDeviceReader) EXPECT() *MockDeviceReaderMockRecorder {
+	return m.recorder
+}
+
+// GetByUUID mocks base method.
+func (m *MockDeviceReader) GetByUUID(ctx context.Context, deviceUUID uuid.UUID) (*models.DeviceDB, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByUUID", ctx, deviceUUID)
+	ret0, _ := ret[0].(*models.DeviceDB)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByUUID indicates an expected call of GetByUUID.
+func (mr *MockDeviceReaderMockRecorder) GetByUUID(ctx, deviceUUID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUUID", reflect.TypeOf((*MockDeviceReader)(nil).GetByUUID), ctx, deviceUUID)
+}
+
+// MockTokenGenerator is a mock of TokenGenerator interface.
+type MockTokenGenerator struct {
+	ctrl     *gomock.Controller
+	recorder *MockTokenGeneratorMockRecorder
+}
+
+// MockTokenGeneratorMockRecorder is the mock recorder for MockTokenGenerator.
+type MockTokenGeneratorMockRecorder struct {
+	mock *MockTokenGenerator
+}
+
+// NewMockTokenGenerator creates a new mock instance.
+func NewMockTokenGenerator(ctrl *gomock.Controller) *MockTokenGenerator {
+	mock := &MockTokenGenerator{ctrl: ctrl}
+	mock.recorder = &MockTokenGeneratorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockTokenGenerator) EXPECT() *MockTokenGeneratorMockRecorder {
+	return m.recorder
+}
+
+// Generate mocks base method.
+func (m *MockTokenGenerator) Generate(userUUID, clientUUID uuid.UUID) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Generate", userUUID, clientUUID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Generate indicates an expected call of Generate.
+func (mr *MockTokenGeneratorMockRecorder) Generate(userUUID, clientUUID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Generate", reflect.TypeOf((*MockTokenGenerator)(nil).Generate), userUUID, clientUUID)
+}

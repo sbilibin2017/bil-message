@@ -47,8 +47,8 @@ func NewDeviceReadRepository(db *sqlx.DB) *DeviceReadRepository {
 	return &DeviceReadRepository{db: db}
 }
 
-// Get возвращает устройство по его UUID.
-func (r *DeviceReadRepository) Get(
+// GetByUUID возвращает устройство по его UUID.
+func (r *DeviceReadRepository) GetByUUID(
 	ctx context.Context,
 	deviceUUID uuid.UUID,
 ) (*models.DeviceDB, error) {

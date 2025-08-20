@@ -21,20 +21,35 @@ type UserWriter interface {
 	Save(ctx context.Context, userUUID uuid.UUID, username string, passwordHash string) error
 }
 
+// DeviceReader
+type DeviceReader interface {
+	GetByUUID(ctx context.Context, deviceUUID uuid.UUID) (*models.DeviceDB, error)
+}
+
+type TokenGenerator interface {
+	Generate(userUUID uuid.UUID, clientUUID uuid.UUID) (string, error)
+}
+
 // AuthService предоставляет методы для создания пользователей и клиентов.
 type AuthService struct {
 	ur UserReader
 	uw UserWriter
+	dr DeviceReader
+	tg TokenGenerator
 }
 
 // NewAuthService создаёт новый экземпляр AuthService.
 func NewAuthService(
 	ur UserReader,
 	uw UserWriter,
+	dr DeviceReader,
+	tg TokenGenerator,
 ) *AuthService {
 	return &AuthService{
 		ur: ur,
 		uw: uw,
+		dr: dr,
+		tg: tg,
 	}
 }
 
@@ -70,4 +85,43 @@ func (svc *AuthService) Register(
 
 	// 5. Возвращаем UUID пользователя
 	return userUUID, nil
+}
+
+// Login проверяет пользователя и устройство, а затем возвращает JWT-токен.
+func (svc *AuthService) Login(
+	ctx context.Context,
+	username string,
+	password string,
+	deviceUUID uuid.UUID,
+) (token string, err error) {
+	// 1. Получаем пользователя
+	user, err := svc.ur.GetByUsername(ctx, username)
+	if err != nil {
+		return "", err
+	}
+	if user == nil {
+		return "", errors.ErrUserNotFound
+	}
+
+	// 2. Проверяем пароль
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		return "", errors.ErrInvalidPassword
+	}
+
+	// 3. Проверяем устройство
+	device, err := svc.dr.GetByUUID(ctx, deviceUUID)
+	if err != nil {
+		return "", err
+	}
+	if device == nil || device.UserUUID != user.UserUUID {
+		return "", errors.ErrDeviceNotFound
+	}
+
+	// 4. Генерируем токен
+	token, err = svc.tg.Generate(user.UserUUID, deviceUUID)
+	if err != nil {
+		return "", err
+	}
+
+	return token, nil
 }

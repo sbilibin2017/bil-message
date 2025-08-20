@@ -102,6 +102,8 @@ func run(
 	userReadRepo := repositories.NewUserReadRepository(conn)
 	userWriteRepo := repositories.NewUserWriteRepository(conn)
 
+	deviceReadRepo := repositories.NewDeviceReadRepository(conn)
+
 	// Инициализация JWT-сервиса
 	jwt, err := jwt.New(jwtSecretKey, jwtExp)
 	if err != nil {
@@ -109,10 +111,11 @@ func run(
 	}
 
 	// Создание сервиса аутентификации
-	authService := services.NewAuthService(userReadRepo, userWriteRepo)
+	authService := services.NewAuthService(userReadRepo, userWriteRepo, deviceReadRepo, jwt)
 
 	// Инициализация HTTP-хендлеров
-	authHandler := handlers.RegisterHandler(authService)
+	registerHandler := handlers.RegisterHandler(authService)
+	loginHandler := handlers.LoginHandler(authService)
 
 	// Создание middleware для проверки JWT
 	authMiddleware := middlewares.AuthMiddleware(jwt)
@@ -128,8 +131,8 @@ func run(
 
 	router.Route("/api/v1", func(r chi.Router) {
 		// Публичные маршруты
-		r.Post("/auth/register", authHandler) // Регистрация нового пользователя
-		r.Post("/auth/login", nil)
+		r.Post("/auth/register", registerHandler)
+		r.Post("/auth/login", loginHandler)
 
 		// Защищенные маршруты (требуют JWT)
 		r.Group(func(r chi.Router) {

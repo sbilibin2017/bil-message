@@ -52,7 +52,7 @@ func TestClientWriteAndRead(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Get client
-	client, err := readRepo.Get(ctx, clientUUID)
+	client, err := readRepo.GetByUUID(ctx, clientUUID)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, clientUUID, client.DeviceUUID)
@@ -85,7 +85,7 @@ func TestClientWrite_UpdateExisting(t *testing.T) {
 	err = writeRepo.Save(ctx, clientUUID, userUUID, publicKey2)
 	assert.NoError(t, err)
 
-	client, err := readRepo.Get(ctx, clientUUID)
+	client, err := readRepo.GetByUUID(ctx, clientUUID)
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	assert.Equal(t, publicKey2, client.PublicKey)
@@ -98,7 +98,7 @@ func TestClientRead_NotFound(t *testing.T) {
 
 	readRepo := NewDeviceReadRepository(db)
 
-	client, err := readRepo.Get(ctx, uuid.New())
+	client, err := readRepo.GetByUUID(ctx, uuid.New())
 	assert.NoError(t, err)
 	assert.Nil(t, client) // теперь должно быть nil вместо ошибки
 }
@@ -114,7 +114,7 @@ func TestClientRead_GetError(t *testing.T) {
 	_, err := db.Exec(`DROP TABLE devices`)
 	assert.NoError(t, err)
 
-	client, err := readRepo.Get(ctx, uuid.New())
+	client, err := readRepo.GetByUUID(ctx, uuid.New())
 	assert.Error(t, err)  // Should return a real SQL error
 	assert.Nil(t, client) // Client should be nil on error
 }
