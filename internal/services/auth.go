@@ -2,20 +2,17 @@ package services
 
 import (
 	"context"
-	"errors"
 
 	"github.com/google/uuid"
+	"github.com/sbilibin2017/bil-message/internal/errors"
 	"github.com/sbilibin2017/bil-message/internal/models"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// ErrUserAlreadyExists возвращается, если пользователь с таким username уже существует.
-var ErrUserAlreadyExists = errors.New("user already exists")
-
 // UserReader определяет интерфейс для чтения данных пользователя из хранилища.
 type UserReader interface {
-	// Get возвращает пользователя по username.
-	Get(ctx context.Context, username string) (*models.UserDB, error)
+	// GetByUsername возвращает пользователя по username.
+	GetByUsername(ctx context.Context, username string) (*models.UserDB, error)
 }
 
 // UserWriter определяет интерфейс для сохранения данных пользователя в хранилище.
@@ -48,12 +45,12 @@ func (svc *AuthService) Register(
 	password string,
 ) (userUUID uuid.UUID, err error) {
 	// 1. Проверяем, существует ли пользователь
-	existingUser, err := svc.ur.Get(ctx, username)
+	existingUser, err := svc.ur.GetByUsername(ctx, username)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	if existingUser != nil {
-		return uuid.Nil, ErrUserAlreadyExists
+		return uuid.Nil, errors.ErrUserAlreadyExists
 	}
 
 	// 2. Хэшируем пароль
