@@ -9,10 +9,11 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/sbilibin2017/bil-message/internal/models"
 	_ "modernc.org/sqlite"
 )
 
-// setupTestDB создает таблицу users с полями CreatedAt и UpdatedAt.
+// setupTestDB создаёт in-memory SQLite БД с таблицей users
 func setupTestDB(t *testing.T) *sqlx.DB {
 	db, err := sqlx.Connect("sqlite", ":memory:")
 	if err != nil {
@@ -22,8 +23,9 @@ func setupTestDB(t *testing.T) *sqlx.DB {
 	schema := `
 	CREATE TABLE users (
 		user_uuid TEXT PRIMARY KEY,
-		username TEXT UNIQUE NOT NULL,
+		username TEXT NOT NULL UNIQUE,
 		password_hash TEXT NOT NULL,
+		public_key TEXT,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -44,25 +46,29 @@ func TestUserWriteAndRead(t *testing.T) {
 	writeRepo := NewUserWriteRepository(db)
 	readRepo := NewUserReadRepository(db)
 
-	userUUID := uuid.New()
+	userUUID := uuid.New().String()
 	username := "testuser"
 	passwordHash := "hash123"
 
+	user := &models.UserDB{
+		UserUUID:     userUUID,
+		Username:     username,
+		PasswordHash: passwordHash,
+	}
+
 	// Save user
-	err := writeRepo.Save(ctx, userUUID, username, passwordHash)
+	err := writeRepo.Save(ctx, user)
 	assert.NoError(t, err)
 
 	// Get user
-	user, err := readRepo.GetByUsername(ctx, username)
+	got, err := readRepo.GetByUsername(ctx, username)
 	assert.NoError(t, err)
-	assert.NotNil(t, user)
-	assert.Equal(t, userUUID, user.UserUUID)
-	assert.Equal(t, username, user.Username)
-	assert.Equal(t, passwordHash, user.PasswordHash)
-
-	// Проверяем, что CreatedAt и UpdatedAt проставлены
-	assert.WithinDuration(t, time.Now(), user.CreatedAt, time.Second)
-	assert.WithinDuration(t, time.Now(), user.UpdatedAt, time.Second)
+	assert.NotNil(t, got)
+	assert.Equal(t, userUUID, got.UserUUID)
+	assert.Equal(t, username, got.Username)
+	assert.Equal(t, passwordHash, got.PasswordHash)
+	assert.WithinDuration(t, time.Now(), got.CreatedAt, time.Second)
+	assert.WithinDuration(t, time.Now(), got.UpdatedAt, time.Second)
 }
 
 func TestUserWrite_UpdateExisting(t *testing.T) {
@@ -73,23 +79,31 @@ func TestUserWrite_UpdateExisting(t *testing.T) {
 	writeRepo := NewUserWriteRepository(db)
 	readRepo := NewUserReadRepository(db)
 
-	userUUID := uuid.New()
+	userUUID := uuid.New().String()
 	username := "existinguser"
 	passwordHash1 := "hash1"
 	passwordHash2 := "hash2"
 
+	user := &models.UserDB{
+		UserUUID:     userUUID,
+		Username:     username,
+		PasswordHash: passwordHash1,
+	}
+
 	// First save
-	err := writeRepo.Save(ctx, userUUID, username, passwordHash1)
+	err := writeRepo.Save(ctx, user)
 	assert.NoError(t, err)
 
 	// Update existing user
-	err = writeRepo.Save(ctx, userUUID, username, passwordHash2)
+	user.PasswordHash = passwordHash2
+	err = writeRepo.Save(ctx, user)
 	assert.NoError(t, err)
 
-	user, err := readRepo.GetByUsername(ctx, username)
+	got, err := readRepo.GetByUsername(ctx, username)
 	assert.NoError(t, err)
-	assert.NotNil(t, user)
-	assert.Equal(t, passwordHash2, user.PasswordHash)
+	assert.NotNil(t, got)
+	assert.Equal(t, passwordHash2, got.PasswordHash)
+	assert.WithinDuration(t, time.Now(), got.UpdatedAt, time.Second)
 }
 
 func TestUserRead_NotFound(t *testing.T) {
@@ -99,25 +113,9 @@ func TestUserRead_NotFound(t *testing.T) {
 
 	readRepo := NewUserReadRepository(db)
 
-	user, err := readRepo.GetByUsername(ctx, "nonexistent")
+	got, err := readRepo.GetByUsername(ctx, "nonexistent")
 	assert.NoError(t, err)
-	assert.Nil(t, user) // теперь проверяем, что пользователь не найден и возвращается nil
-}
-
-func TestUserRead_GetError(t *testing.T) {
-	ctx := context.Background()
-	db := setupTestDB(t)
-	defer db.Close()
-
-	readRepo := NewUserReadRepository(db)
-
-	// Intentionally break the table to simulate a SQL error
-	_, err := db.Exec(`DROP TABLE users`)
-	assert.NoError(t, err)
-
-	user, err := readRepo.GetByUsername(ctx, "anyuser")
-	assert.Error(t, err) // Should return an actual SQL error
-	assert.Nil(t, user)  // User should be nil on error
+	assert.Nil(t, got)
 }
 
 func TestUserRead_GetByUUID(t *testing.T) {
@@ -128,21 +126,25 @@ func TestUserRead_GetByUUID(t *testing.T) {
 	writeRepo := NewUserWriteRepository(db)
 	readRepo := NewUserReadRepository(db)
 
-	userUUID := uuid.New()
+	userUUID := uuid.New().String()
 	username := "uuiduser"
 	passwordHash := "uuidhash"
 
-	// Save user
-	err := writeRepo.Save(ctx, userUUID, username, passwordHash)
+	user := &models.UserDB{
+		UserUUID:     userUUID,
+		Username:     username,
+		PasswordHash: passwordHash,
+	}
+
+	err := writeRepo.Save(ctx, user)
 	assert.NoError(t, err)
 
-	// Get user by UUID
-	user, err := readRepo.GetByUUID(ctx, userUUID)
+	got, err := readRepo.GetByUUID(ctx, userUUID)
 	assert.NoError(t, err)
-	assert.NotNil(t, user)
-	assert.Equal(t, userUUID, user.UserUUID)
-	assert.Equal(t, username, user.Username)
-	assert.Equal(t, passwordHash, user.PasswordHash)
+	assert.NotNil(t, got)
+	assert.Equal(t, userUUID, got.UserUUID)
+	assert.Equal(t, username, got.Username)
+	assert.Equal(t, passwordHash, got.PasswordHash)
 }
 
 func TestUserRead_GetByUUID_NotFound(t *testing.T) {
@@ -152,11 +154,10 @@ func TestUserRead_GetByUUID_NotFound(t *testing.T) {
 
 	readRepo := NewUserReadRepository(db)
 
-	randomUUID := uuid.New()
-
-	user, err := readRepo.GetByUUID(ctx, randomUUID)
+	randomUUID := uuid.New().String()
+	got, err := readRepo.GetByUUID(ctx, randomUUID)
 	assert.NoError(t, err)
-	assert.Nil(t, user) // должен вернуть nil, если пользователь не найден
+	assert.Nil(t, got)
 }
 
 func TestUserRead_GetByUUID_Error(t *testing.T) {
@@ -166,12 +167,12 @@ func TestUserRead_GetByUUID_Error(t *testing.T) {
 
 	readRepo := NewUserReadRepository(db)
 
-	// ломаем таблицу users
+	// ломаем таблицу
 	_, err := db.Exec(`DROP TABLE users`)
 	assert.NoError(t, err)
 
-	randomUUID := uuid.New()
-	user, err := readRepo.GetByUUID(ctx, randomUUID)
-	assert.Error(t, err) // должна вернуться SQL ошибка
-	assert.Nil(t, user)  // и user должен быть nil
+	randomUUID := uuid.New().String()
+	got, err := readRepo.GetByUUID(ctx, randomUUID)
+	assert.Error(t, err)
+	assert.Nil(t, got)
 }

@@ -3,11 +3,10 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"net/http"
 
-	"github.com/google/uuid"
-	"github.com/sbilibin2017/bil-message/internal/configs/log"
 	"github.com/sbilibin2017/bil-message/internal/errors"
 )
 
@@ -28,7 +27,7 @@ type RegisterRequest struct {
 
 // Registerer определяет интерфейс для регистрации пользователя и получения JWT токена.
 type Registerer interface {
-	Register(ctx context.Context, username string, password string) (userUUID uuid.UUID, err error)
+	Register(ctx context.Context, username string, password string) (userUUID string, err error)
 }
 
 // RegisterHandler обрабатывает регистрацию пользователя и возвращает токен в заголовке.
@@ -63,7 +62,7 @@ func RegisterHandler(
 				w.WriteHeader(http.StatusConflict)
 				return
 			default:
-				log.Log("user register", err)
+				log.Printf("op: %s, err:%s", "user register", err.Error())
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -73,7 +72,7 @@ func RegisterHandler(
 		// Устанавливаем Content-Type и возвращаем UUID в plain text
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(userUUID.String()))
+		w.Write([]byte(userUUID))
 	}
 }
 
@@ -93,12 +92,12 @@ type LoginRequest struct {
 	// UUID устройства пользователя
 	// required: true
 	// example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-	DeviceUUID uuid.UUID `json:"device_uuid"`
+	DeviceUUID string `json:"device_uuid"`
 }
 
 // LoginRequest определяет интерфейс для регистрации пользователя и получения JWT токена.
 type Loginer interface {
-	Login(ctx context.Context, username string, password string, deviceUUID uuid.UUID) (token string, err error)
+	Login(ctx context.Context, username string, password string, deviceUUID string) (token string, err error)
 }
 
 // LoginHandler обрабатывает аутентификацию пользователя и возвращает JWT токен в заголовке Authorization.
@@ -128,7 +127,7 @@ func LoginHandler(
 		// Вызываем метод логина
 		token, err := loginer.Login(r.Context(), req.Username, req.Password, req.DeviceUUID)
 		if err != nil {
-			log.Log("user login", err)
+			log.Printf("op: %s, err:%s", "user login", err.Error())
 			switch err {
 			case errors.ErrUserNotFound, errors.ErrInvalidPassword, errors.ErrDeviceNotFound:
 				w.WriteHeader(http.StatusUnauthorized) // 401 для ошибок аутентификации

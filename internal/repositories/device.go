@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sbilibin2017/bil-message/internal/models"
 )
@@ -22,9 +21,7 @@ func NewDeviceWriteRepository(db *sqlx.DB) *DeviceWriteRepository {
 // Save сохраняет клиента в базе данных.
 func (r *DeviceWriteRepository) Save(
 	ctx context.Context,
-	deviceUUID uuid.UUID,
-	userUUID uuid.UUID,
-	publicKey string,
+	device *models.DeviceDB,
 ) error {
 	query := `
 	INSERT INTO devices (device_uuid, user_uuid, public_key)
@@ -33,7 +30,7 @@ func (r *DeviceWriteRepository) Save(
 	SET public_key = excluded.public_key,
 	    updated_at = CURRENT_TIMESTAMP
 	`
-	_, err := r.db.ExecContext(ctx, query, deviceUUID, userUUID, publicKey)
+	_, err := r.db.ExecContext(ctx, query, device.DeviceUUID, device.UserUUID, device.PublicKey)
 	return err
 }
 
@@ -50,7 +47,7 @@ func NewDeviceReadRepository(db *sqlx.DB) *DeviceReadRepository {
 // GetByUUID возвращает устройство по его UUID.
 func (r *DeviceReadRepository) GetByUUID(
 	ctx context.Context,
-	deviceUUID uuid.UUID,
+	deviceUUID string,
 ) (*models.DeviceDB, error) {
 	var device models.DeviceDB
 	query := `SELECT device_uuid, user_uuid, public_key, created_at, updated_at 

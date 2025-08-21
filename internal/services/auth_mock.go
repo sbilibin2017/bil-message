@@ -9,7 +9,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	uuid "github.com/google/uuid"
 	models "github.com/sbilibin2017/bil-message/internal/models"
 )
 
@@ -34,6 +33,21 @@ func NewMockUserReader(ctrl *gomock.Controller) *MockUserReader {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockUserReader) EXPECT() *MockUserReaderMockRecorder {
 	return m.recorder
+}
+
+// GetByUUID mocks base method.
+func (m *MockUserReader) GetByUUID(ctx context.Context, userUUID string) (*models.UserDB, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetByUUID", ctx, userUUID)
+	ret0, _ := ret[0].(*models.UserDB)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetByUUID indicates an expected call of GetByUUID.
+func (mr *MockUserReaderMockRecorder) GetByUUID(ctx, userUUID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUUID", reflect.TypeOf((*MockUserReader)(nil).GetByUUID), ctx, userUUID)
 }
 
 // GetByUsername mocks base method.
@@ -75,17 +89,17 @@ func (m *MockUserWriter) EXPECT() *MockUserWriterMockRecorder {
 }
 
 // Save mocks base method.
-func (m *MockUserWriter) Save(ctx context.Context, userUUID uuid.UUID, username, passwordHash string) error {
+func (m *MockUserWriter) Save(ctx context.Context, user *models.UserDB) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, userUUID, username, passwordHash)
+	ret := m.ctrl.Call(m, "Save", ctx, user)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockUserWriterMockRecorder) Save(ctx, userUUID, username, passwordHash interface{}) *gomock.Call {
+func (mr *MockUserWriterMockRecorder) Save(ctx, user interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockUserWriter)(nil).Save), ctx, userUUID, username, passwordHash)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockUserWriter)(nil).Save), ctx, user)
 }
 
 // MockDeviceReader is a mock of DeviceReader interface.
@@ -112,7 +126,7 @@ func (m *MockDeviceReader) EXPECT() *MockDeviceReaderMockRecorder {
 }
 
 // GetByUUID mocks base method.
-func (m *MockDeviceReader) GetByUUID(ctx context.Context, deviceUUID uuid.UUID) (*models.DeviceDB, error) {
+func (m *MockDeviceReader) GetByUUID(ctx context.Context, deviceUUID string) (*models.DeviceDB, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetByUUID", ctx, deviceUUID)
 	ret0, _ := ret[0].(*models.DeviceDB)
@@ -150,16 +164,16 @@ func (m *MockTokenGenerator) EXPECT() *MockTokenGeneratorMockRecorder {
 }
 
 // Generate mocks base method.
-func (m *MockTokenGenerator) Generate(userUUID, clientUUID uuid.UUID) (string, error) {
+func (m *MockTokenGenerator) Generate(payload *models.TokenPayload) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Generate", userUUID, clientUUID)
+	ret := m.ctrl.Call(m, "Generate", payload)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Generate indicates an expected call of Generate.
-func (mr *MockTokenGeneratorMockRecorder) Generate(userUUID, clientUUID interface{}) *gomock.Call {
+func (mr *MockTokenGeneratorMockRecorder) Generate(payload interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Generate", reflect.TypeOf((*MockTokenGenerator)(nil).Generate), userUUID, clientUUID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Generate", reflect.TypeOf((*MockTokenGenerator)(nil).Generate), payload)
 }

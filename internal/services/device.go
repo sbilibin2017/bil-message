@@ -10,13 +10,12 @@ import (
 
 // DeviceUserReader определяет интерфейс для чтения данных пользователя из хранилища.
 type DeviceUserReader interface {
-	// GetByUUID возвращает пользователя по userUUID.
-	GetByUUID(ctx context.Context, userUUID uuid.UUID) (*models.UserDB, error)
+	GetByUUID(ctx context.Context, userUUID string) (*models.UserDB, error)
 }
 
 // DeviceWriter определяет интерфейс для сохранения данных устройства.
 type DeviceWriter interface {
-	Save(ctx context.Context, deviceUUID uuid.UUID, userUUID uuid.UUID, publicKey string) error
+	Save(ctx context.Context, device *models.DeviceDB) error
 }
 
 // DeviceService управляет устройствами пользователя.
@@ -26,10 +25,7 @@ type DeviceService struct {
 }
 
 // NewDeviceService создаёт новый экземпляр DeviceService.
-func NewDeviceService(
-	ur DeviceUserReader,
-	dw DeviceWriter,
-) *DeviceService {
+func NewDeviceService(ur DeviceUserReader, dw DeviceWriter) *DeviceService {
 	return &DeviceService{
 		ur: ur,
 		dw: dw,
@@ -37,12 +33,8 @@ func NewDeviceService(
 }
 
 // Register регистрирует новое устройство пользователя.
-func (svc *DeviceService) Register(
-	ctx context.Context,
-	userUUID uuid.UUID,
-	publicKey string,
-) (*uuid.UUID, error) {
-	// 1. Проверяем, что пользователь существует
+func (svc *DeviceService) Register(ctx context.Context, userUUID string, publicKey string) (*string, error) {
+	// Проверяем, что пользователь существует
 	user, err := svc.ur.GetByUUID(ctx, userUUID)
 	if err != nil {
 		return nil, err
@@ -51,14 +43,20 @@ func (svc *DeviceService) Register(
 		return nil, errors.ErrUserNotFound
 	}
 
-	// 2. Генерируем UUID устройства
-	deviceUUID := uuid.New()
+	// Генерируем UUID устройства
+	deviceUUID := uuid.New().String()
 
-	// 3. Сохраняем устройство
-	if err := svc.dw.Save(ctx, deviceUUID, userUUID, publicKey); err != nil {
+	// Создаём DeviceDB
+	device := &models.DeviceDB{
+		DeviceUUID: deviceUUID,
+		UserUUID:   userUUID,
+		PublicKey:  publicKey,
+	}
+
+	// Сохраняем устройство
+	if err := svc.dw.Save(ctx, device); err != nil {
 		return nil, err
 	}
 
-	// 4. Возвращаем UUID устройства
 	return &deviceUUID, nil
 }

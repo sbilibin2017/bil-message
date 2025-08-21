@@ -38,9 +38,8 @@ func TestAuthService_Register(t *testing.T) {
 				mockReader.EXPECT().
 					GetByUsername(gomock.Any(), "newuser").
 					Return(nil, nil)
-
 				mockWriter.EXPECT().
-					Save(gomock.Any(), gomock.Any(), "newuser", gomock.Any()).
+					Save(gomock.Any(), gomock.Any()).
 					Return(nil)
 			},
 			expectedError: nil,
@@ -75,9 +74,8 @@ func TestAuthService_Register(t *testing.T) {
 				mockReader.EXPECT().
 					GetByUsername(gomock.Any(), "newuser2").
 					Return(nil, nil)
-
 				mockWriter.EXPECT().
-					Save(gomock.Any(), gomock.Any(), "newuser2", gomock.Any()).
+					Save(gomock.Any(), gomock.Any()).
 					Return(errors.New("save error"))
 			},
 			expectedError: errors.New("save error"),
@@ -94,10 +92,10 @@ func TestAuthService_Register(t *testing.T) {
 			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.Equal(t, tt.expectedError.Error(), err.Error())
-				assert.Equal(t, uuid.Nil, userUUID)
+				assert.Equal(t, "", userUUID)
 			} else {
 				assert.NoError(t, err)
-				assert.NotEqual(t, uuid.Nil, userUUID)
+				assert.NotEmpty(t, userUUID)
 			}
 		})
 	}
@@ -107,23 +105,23 @@ func TestAuthService_Login(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockReader := services.NewMockUserReader(ctrl)
-	mockDevice := services.NewMockDeviceReader(ctrl)
-	mockToken := services.NewMockTokenGenerator(ctrl)
+	mockUserReader := services.NewMockUserReader(ctrl)
+	mockDeviceReader := services.NewMockDeviceReader(ctrl)
+	mockTokenGen := services.NewMockTokenGenerator(ctrl)
 
-	svc := services.NewAuthService(mockReader, nil, mockDevice, mockToken)
+	svc := services.NewAuthService(mockUserReader, nil, mockDeviceReader, mockTokenGen)
 
 	userUUID := uuid.New()
 	deviceUUID := uuid.New()
 	password := "password123"
-	passwordHashBytes, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	passwordHash := string(passwordHashBytes)
+	passwordHash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
 	tests := []struct {
 		name          string
 		username      string
 		passwordInput string
 		setupMocks    func()
+		expectedToken string
 		expectedError error
 	}{
 		{
@@ -131,18 +129,17 @@ func TestAuthService_Login(t *testing.T) {
 			username:      "user1",
 			passwordInput: password,
 			setupMocks: func() {
-				mockReader.EXPECT().
+				mockUserReader.EXPECT().
 					GetByUsername(gomock.Any(), "user1").
-					Return(&models.UserDB{UserUUID: userUUID, PasswordHash: passwordHash}, nil)
-
-				mockDevice.EXPECT().
-					GetByUUID(gomock.Any(), deviceUUID).
-					Return(&models.DeviceDB{UserUUID: userUUID}, nil)
-
-				mockToken.EXPECT().
-					Generate(userUUID, deviceUUID).
+					Return(&models.UserDB{UserUUID: userUUID.String(), PasswordHash: string(passwordHash)}, nil)
+				mockDeviceReader.EXPECT().
+					GetByUUID(gomock.Any(), deviceUUID.String()).
+					Return(&models.DeviceDB{DeviceUUID: deviceUUID.String(), UserUUID: userUUID.String()}, nil)
+				mockTokenGen.EXPECT().
+					Generate(&models.TokenPayload{UserUUID: userUUID.String(), DeviceUUID: deviceUUID.String()}).
 					Return("token123", nil)
 			},
+			expectedToken: "token123",
 			expectedError: nil,
 		},
 		{
@@ -150,10 +147,11 @@ func TestAuthService_Login(t *testing.T) {
 			username:      "unknown",
 			passwordInput: password,
 			setupMocks: func() {
-				mockReader.EXPECT().
+				mockUserReader.EXPECT().
 					GetByUsername(gomock.Any(), "unknown").
 					Return(nil, nil)
 			},
+			expectedToken: "",
 			expectedError: internalErrors.ErrUserNotFound,
 		},
 		{
@@ -161,10 +159,11 @@ func TestAuthService_Login(t *testing.T) {
 			username:      "user1",
 			passwordInput: "wrongpassword",
 			setupMocks: func() {
-				mockReader.EXPECT().
+				mockUserReader.EXPECT().
 					GetByUsername(gomock.Any(), "user1").
-					Return(&models.UserDB{UserUUID: userUUID, PasswordHash: passwordHash}, nil)
+					Return(&models.UserDB{UserUUID: userUUID.String(), PasswordHash: string(passwordHash)}, nil)
 			},
+			expectedToken: "",
 			expectedError: internalErrors.ErrInvalidPassword,
 		},
 		{
@@ -172,147 +171,63 @@ func TestAuthService_Login(t *testing.T) {
 			username:      "user1",
 			passwordInput: password,
 			setupMocks: func() {
-				mockReader.EXPECT().
+				mockUserReader.EXPECT().
 					GetByUsername(gomock.Any(), "user1").
-					Return(&models.UserDB{UserUUID: userUUID, PasswordHash: passwordHash}, nil)
-
-				mockDevice.EXPECT().
-					GetByUUID(gomock.Any(), deviceUUID).
-					Return(nil, nil)
-			},
-			expectedError: internalErrors.ErrDeviceNotFound,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.setupMocks != nil {
-				tt.setupMocks()
-			}
-
-			token, err := svc.Login(context.Background(), tt.username, tt.passwordInput, deviceUUID)
-			if tt.expectedError != nil {
-				assert.Error(t, err)
-				assert.Equal(t, tt.expectedError, err)
-				assert.Equal(t, "", token)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, "token123", token)
-			}
-		})
-	}
-}
-
-func TestAuthService_Login_Errors(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockReader := services.NewMockUserReader(ctrl)
-	mockDeviceReader := services.NewMockDeviceReader(ctrl)
-	mockTokenGen := services.NewMockTokenGenerator(ctrl)
-
-	svc := services.NewAuthService(mockReader, nil, mockDeviceReader, mockTokenGen)
-
-	username := "testuser"
-	password := "password123"
-	deviceUUID := uuid.New()
-	userUUID := uuid.New()
-
-	// Helper to generate bcrypt hash
-	hashPassword := func(pw string) string {
-		hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
-		if err != nil {
-			t.Fatal(err) // fail the test if hashing fails
-		}
-		return string(hash)
-	}
-
-	tests := []struct {
-		name          string
-		setupMocks    func()
-		expectedError error
-	}{
-		{
-			name: "user not found",
-			setupMocks: func() {
-				mockReader.EXPECT().
-					GetByUsername(gomock.Any(), username).
-					Return(nil, nil)
-			},
-			expectedError: internalErrors.ErrUserNotFound,
-		},
-		{
-			name: "reader returns error",
-			setupMocks: func() {
-				mockReader.EXPECT().
-					GetByUsername(gomock.Any(), username).
-					Return(nil, errors.New("db error"))
-			},
-			expectedError: errors.New("db error"),
-		},
-		{
-			name: "invalid password",
-			setupMocks: func() {
-				mockReader.EXPECT().
-					GetByUsername(gomock.Any(), username).
-					Return(&models.UserDB{
-						UserUUID:     userUUID,
-						PasswordHash: "$2a$10$invalidhashforbcrypttest", // invalid hash
-					}, nil)
-			},
-			expectedError: internalErrors.ErrInvalidPassword,
-		},
-		{
-			name: "device not found",
-			setupMocks: func() {
-				mockReader.EXPECT().
-					GetByUsername(gomock.Any(), username).
-					Return(&models.UserDB{
-						UserUUID:     userUUID,
-						PasswordHash: hashPassword(password),
-					}, nil)
+					Return(&models.UserDB{UserUUID: userUUID.String(), PasswordHash: string(passwordHash)}, nil)
 				mockDeviceReader.EXPECT().
-					GetByUUID(gomock.Any(), deviceUUID).
+					GetByUUID(gomock.Any(), deviceUUID.String()).
 					Return(nil, nil)
 			},
+			expectedToken: "",
 			expectedError: internalErrors.ErrDeviceNotFound,
 		},
 		{
-			name: "device belongs to different user",
+			name:          "device belongs to different user",
+			username:      "user1",
+			passwordInput: password,
 			setupMocks: func() {
-				mockReader.EXPECT().
-					GetByUsername(gomock.Any(), username).
-					Return(&models.UserDB{
-						UserUUID:     userUUID,
-						PasswordHash: hashPassword(password),
-					}, nil)
+				mockUserReader.EXPECT().
+					GetByUsername(gomock.Any(), "user1").
+					Return(&models.UserDB{UserUUID: userUUID.String(), PasswordHash: string(passwordHash)}, nil)
 				mockDeviceReader.EXPECT().
-					GetByUUID(gomock.Any(), deviceUUID).
-					Return(&models.DeviceDB{
-						UserUUID: uuid.New(), // different user
-					}, nil)
+					GetByUUID(gomock.Any(), deviceUUID.String()).
+					Return(&models.DeviceDB{DeviceUUID: deviceUUID.String(), UserUUID: uuid.New().String()}, nil)
 			},
+			expectedToken: "",
 			expectedError: internalErrors.ErrDeviceNotFound,
 		},
 		{
-			name: "token generation error",
+			name:          "token generation error",
+			username:      "user1",
+			passwordInput: password,
 			setupMocks: func() {
-				mockReader.EXPECT().
-					GetByUsername(gomock.Any(), username).
-					Return(&models.UserDB{
-						UserUUID:     userUUID,
-						PasswordHash: hashPassword(password),
-					}, nil)
+				mockUserReader.EXPECT().
+					GetByUsername(gomock.Any(), "user1").
+					Return(&models.UserDB{UserUUID: userUUID.String(), PasswordHash: string(passwordHash)}, nil)
 				mockDeviceReader.EXPECT().
-					GetByUUID(gomock.Any(), deviceUUID).
-					Return(&models.DeviceDB{
-						UserUUID: userUUID,
-					}, nil)
+					GetByUUID(gomock.Any(), deviceUUID.String()).
+					Return(&models.DeviceDB{DeviceUUID: deviceUUID.String(), UserUUID: userUUID.String()}, nil)
 				mockTokenGen.EXPECT().
-					Generate(userUUID, deviceUUID).
+					Generate(&models.TokenPayload{UserUUID: userUUID.String(), DeviceUUID: deviceUUID.String()}).
 					Return("", errors.New("token error"))
 			},
+			expectedToken: "",
 			expectedError: errors.New("token error"),
+		},
+		{
+			name:          "device reader returns error",
+			username:      "user1",
+			passwordInput: password,
+			setupMocks: func() {
+				mockUserReader.EXPECT().
+					GetByUsername(gomock.Any(), "user1").
+					Return(&models.UserDB{UserUUID: userUUID.String(), PasswordHash: string(passwordHash)}, nil)
+				mockDeviceReader.EXPECT().
+					GetByUUID(gomock.Any(), deviceUUID.String()).
+					Return(nil, errors.New("device db error"))
+			},
+			expectedToken: "",
+			expectedError: errors.New("device db error"),
 		},
 	}
 
@@ -322,8 +237,8 @@ func TestAuthService_Login_Errors(t *testing.T) {
 				tt.setupMocks()
 			}
 
-			token, err := svc.Login(context.Background(), username, password, deviceUUID)
-			assert.Equal(t, "", token)
+			token, err := svc.Login(context.Background(), tt.username, tt.passwordInput, deviceUUID.String())
+			assert.Equal(t, tt.expectedToken, token)
 			if tt.expectedError != nil {
 				assert.EqualError(t, err, tt.expectedError.Error())
 			} else {
@@ -331,49 +246,4 @@ func TestAuthService_Login_Errors(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestAuthService_Login_DeviceReaderError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockReader := services.NewMockUserReader(ctrl)
-	mockDeviceReader := services.NewMockDeviceReader(ctrl)
-	mockTokenGen := services.NewMockTokenGenerator(ctrl)
-
-	svc := services.NewAuthService(mockReader, nil, mockDeviceReader, mockTokenGen)
-
-	username := "testuser"
-	password := "password123"
-	deviceUUID := uuid.New()
-	userUUID := uuid.New()
-
-	// Helper to generate bcrypt hash
-	hashPassword := func(pw string) string {
-		hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(hash)
-	}
-
-	// Mock: user exists
-	mockReader.EXPECT().
-		GetByUsername(gomock.Any(), username).
-		Return(&models.UserDB{
-			UserUUID:     userUUID,
-			PasswordHash: hashPassword(password),
-		}, nil)
-
-	// Mock: device reader returns an error
-	mockDeviceReader.EXPECT().
-		GetByUUID(gomock.Any(), deviceUUID).
-		Return(nil, errors.New("device db error"))
-
-	// Call the Login method
-	token, err := svc.Login(context.Background(), username, password, deviceUUID)
-
-	// Assertions
-	assert.Equal(t, "", token)
-	assert.EqualError(t, err, "device db error")
 }

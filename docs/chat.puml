@@ -1,0 +1,29 @@
+@startuml
+actor "User A" as UA
+actor "User B" as UB
+participant "Chat Service" as Chat
+database "DB" as DB
+collections "WebSocket Hub" as WS
+
+== Создание чата ==
+UA -> Chat : POST /chats {targetUser: B}
+Chat -> DB : Проверить наличие чата (A,B)
+DB --> Chat : Чат не найден
+Chat -> DB : Создать запись чата {chatID, A, B}
+DB --> Chat : Подтверждение
+Chat --> UA : chatID
+
+== Подключение к чату ==
+UA -> WS : WebSocket connect /ws/{chatID}
+UB -> WS : WebSocket connect /ws/{chatID}
+WS -> DB : Проверить пользователей чата
+DB --> WS : OK
+WS --> UA : Соединение установлено
+WS --> UB : Соединение установлено
+
+== Отправка сообщения ==
+UA -> WS : "Привет, B!"
+WS -> DB : Сохранить сообщение {chatID, sender: A, text}
+DB --> WS : Подтверждение сохранения
+WS -> UB : "Привет, B!"
+@enduml

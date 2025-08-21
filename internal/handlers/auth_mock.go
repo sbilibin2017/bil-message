@@ -9,7 +9,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	uuid "github.com/google/uuid"
 )
 
 // MockRegisterer is a mock of Registerer interface.
@@ -36,10 +35,10 @@ func (m *MockRegisterer) EXPECT() *MockRegistererMockRecorder {
 }
 
 // Register mocks base method.
-func (m *MockRegisterer) Register(ctx context.Context, username, password string) (uuid.UUID, error) {
+func (m *MockRegisterer) Register(ctx context.Context, username, password string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Register", ctx, username, password)
-	ret0, _ := ret[0].(uuid.UUID)
+	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -74,7 +73,7 @@ func (m *MockLoginer) EXPECT() *MockLoginerMockRecorder {
 }
 
 // Login mocks base method.
-func (m *MockLoginer) Login(ctx context.Context, username, password string, deviceUUID uuid.UUID) (string, error) {
+func (m *MockLoginer) Login(ctx context.Context, username, password, deviceUUID string) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Login", ctx, username, password, deviceUUID)
 	ret0, _ := ret[0].(string)

@@ -9,10 +9,11 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 
+	"github.com/sbilibin2017/bil-message/internal/models"
 	_ "modernc.org/sqlite"
 )
 
-func setupClientTestDB(t *testing.T) *sqlx.DB {
+func setupDeviceTestDB(t *testing.T) *sqlx.DB {
 	db, err := sqlx.Connect("sqlite", ":memory:")
 	if err != nil {
 		t.Fatalf("failed to connect to sqlite: %v", err)
@@ -22,7 +23,7 @@ func setupClientTestDB(t *testing.T) *sqlx.DB {
 	CREATE TABLE devices (
 		device_uuid TEXT PRIMARY KEY,
 		user_uuid TEXT NOT NULL,
-		public_key TEXT NOT NULL,
+		public_key TEXT,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 	);
@@ -35,86 +36,97 @@ func setupClientTestDB(t *testing.T) *sqlx.DB {
 	return db
 }
 
-func TestClientWriteAndRead(t *testing.T) {
+func TestDeviceWriteAndRead(t *testing.T) {
 	ctx := context.Background()
-	db := setupClientTestDB(t)
+	db := setupDeviceTestDB(t)
 	defer db.Close()
 
 	writeRepo := NewDeviceWriteRepository(db)
 	readRepo := NewDeviceReadRepository(db)
 
-	clientUUID := uuid.New()
-	userUUID := uuid.New()
+	deviceUUID := uuid.New().String()
+	userUUID := uuid.New().String()
 	publicKey := "pubkey123"
 
-	// Save client
-	err := writeRepo.Save(ctx, clientUUID, userUUID, publicKey)
+	device := &models.DeviceDB{
+		DeviceUUID: deviceUUID,
+		UserUUID:   userUUID,
+		PublicKey:  publicKey,
+	}
+
+	// Save device
+	err := writeRepo.Save(ctx, device)
 	assert.NoError(t, err)
 
-	// Get client
-	client, err := readRepo.GetByUUID(ctx, clientUUID)
+	// Get device
+	got, err := readRepo.GetByUUID(ctx, deviceUUID)
 	assert.NoError(t, err)
-	assert.NotNil(t, client)
-	assert.Equal(t, clientUUID, client.DeviceUUID)
-	assert.Equal(t, userUUID, client.UserUUID)
-	assert.Equal(t, publicKey, client.PublicKey)
-
-	// Проверяем, что CreatedAt и UpdatedAt проставлены
-	assert.WithinDuration(t, time.Now(), client.CreatedAt, time.Second)
-	assert.WithinDuration(t, time.Now(), client.UpdatedAt, time.Second)
+	assert.NotNil(t, got)
+	assert.Equal(t, deviceUUID, got.DeviceUUID)
+	assert.Equal(t, userUUID, got.UserUUID)
+	assert.Equal(t, publicKey, got.PublicKey)
+	assert.WithinDuration(t, time.Now(), got.CreatedAt, time.Second)
+	assert.WithinDuration(t, time.Now(), got.UpdatedAt, time.Second)
 }
 
-func TestClientWrite_UpdateExisting(t *testing.T) {
+func TestDeviceWrite_UpdateExisting(t *testing.T) {
 	ctx := context.Background()
-	db := setupClientTestDB(t)
+	db := setupDeviceTestDB(t)
 	defer db.Close()
 
 	writeRepo := NewDeviceWriteRepository(db)
 	readRepo := NewDeviceReadRepository(db)
 
-	clientUUID := uuid.New()
-	userUUID := uuid.New()
+	deviceUUID := uuid.New().String()
+	userUUID := uuid.New().String()
 	publicKey1 := "pubkey1"
 	publicKey2 := "pubkey2"
 
+	device := &models.DeviceDB{
+		DeviceUUID: deviceUUID,
+		UserUUID:   userUUID,
+		PublicKey:  publicKey1,
+	}
+
 	// First save
-	err := writeRepo.Save(ctx, clientUUID, userUUID, publicKey1)
+	err := writeRepo.Save(ctx, device)
 	assert.NoError(t, err)
 
-	// Update existing client
-	err = writeRepo.Save(ctx, clientUUID, userUUID, publicKey2)
+	// Update existing device
+	device.PublicKey = publicKey2
+	err = writeRepo.Save(ctx, device)
 	assert.NoError(t, err)
 
-	client, err := readRepo.GetByUUID(ctx, clientUUID)
+	got, err := readRepo.GetByUUID(ctx, deviceUUID)
 	assert.NoError(t, err)
-	assert.NotNil(t, client)
-	assert.Equal(t, publicKey2, client.PublicKey)
+	assert.NotNil(t, got)
+	assert.Equal(t, publicKey2, got.PublicKey)
 }
 
-func TestClientRead_NotFound(t *testing.T) {
+func TestDeviceRead_NotFound(t *testing.T) {
 	ctx := context.Background()
-	db := setupClientTestDB(t)
+	db := setupDeviceTestDB(t)
 	defer db.Close()
 
 	readRepo := NewDeviceReadRepository(db)
 
-	client, err := readRepo.GetByUUID(ctx, uuid.New())
+	got, err := readRepo.GetByUUID(ctx, uuid.New().String())
 	assert.NoError(t, err)
-	assert.Nil(t, client) // теперь должно быть nil вместо ошибки
+	assert.Nil(t, got)
 }
 
-func TestClientRead_GetError(t *testing.T) {
+func TestDeviceRead_GetError(t *testing.T) {
 	ctx := context.Background()
-	db := setupClientTestDB(t)
+	db := setupDeviceTestDB(t)
 	defer db.Close()
 
 	readRepo := NewDeviceReadRepository(db)
 
-	// Intentionally drop the table to simulate a SQL error
+	// Ломаем таблицу
 	_, err := db.Exec(`DROP TABLE devices`)
 	assert.NoError(t, err)
 
-	client, err := readRepo.GetByUUID(ctx, uuid.New())
-	assert.Error(t, err)  // Should return a real SQL error
-	assert.Nil(t, client) // Client should be nil on error
+	got, err := readRepo.GetByUUID(ctx, uuid.New().String())
+	assert.Error(t, err)
+	assert.Nil(t, got)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 
-	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 	"github.com/sbilibin2017/bil-message/internal/models"
 )
@@ -21,9 +20,7 @@ func NewUserWriteRepository(db *sqlx.DB) *UserWriteRepository {
 // Save сохраняет пользователя в базе данных.
 func (r *UserWriteRepository) Save(
 	ctx context.Context,
-	userUUID uuid.UUID,
-	username string,
-	passwordHash string,
+	user *models.UserDB,
 ) error {
 	query := `
 		INSERT INTO users (user_uuid, username, password_hash)
@@ -32,7 +29,7 @@ func (r *UserWriteRepository) Save(
 		SET password_hash = excluded.password_hash,
 		    updated_at = CURRENT_TIMESTAMP
 	`
-	_, err := r.db.ExecContext(ctx, query, userUUID, username, passwordHash)
+	_, err := r.db.ExecContext(ctx, query, user.UserUUID, user.Username, user.PasswordHash)
 	return err
 }
 
@@ -65,7 +62,7 @@ func (r *UserReadRepository) GetByUsername(
 // GetByUUID возвращает пользователя по userUUID.
 func (r *UserReadRepository) GetByUUID(
 	ctx context.Context,
-	userUUID uuid.UUID,
+	userUUID string,
 ) (*models.UserDB, error) {
 	var user models.UserDB
 	query := `SELECT user_uuid, username, password_hash, created_at, updated_at 
