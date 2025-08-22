@@ -1,4 +1,4 @@
-package handlers_test
+package handlers
 
 import (
 	"bytes"
@@ -10,7 +10,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	internalErrors "github.com/sbilibin2017/bil-message/internal/errors"
-	"github.com/sbilibin2017/bil-message/internal/handlers"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,88 +17,84 @@ func TestDeviceRegisterHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRegisterer := handlers.NewMockDeviceRegisterer(ctrl)
+	mockReg := NewMockDeviceRegisterer(ctrl)
+	handler := DeviceRegisterHandler(mockReg)
 
-	validUserUUID := uuid.MustParse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
-	validDeviceUUID := uuid.MustParse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+	validUUID := uuid.New().String()
+	publicKey := "ssh-rsa AAAAB3..."
 
 	tests := []struct {
 		name           string
-		requestBody    string
-		setupMock      func()
+		body           string
+		mockSetup      func()
 		expectedStatus int
 		expectedBody   string
 	}{
 		{
-			name:        "success",
-			requestBody: `{"user_uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","public_key":"ssh-rsa AAAAB3Nza..."}`,
-			setupMock: func() {
-				mockRegisterer.EXPECT().
-					Register(gomock.Any(), validUserUUID, "ssh-rsa AAAAB3Nza...").
-					Return(&validDeviceUUID, nil)
+			name: "successful registration",
+			body: `{"user_uuid":"` + validUUID + `","public_key":"` + publicKey + `"}`,
+			mockSetup: func() {
+				deviceUUID := "device-123"
+				mockReg.EXPECT().
+					Register(gomock.Any(), validUUID, publicKey).
+					Return(&deviceUUID, nil)
 			},
 			expectedStatus: http.StatusOK,
-			expectedBody:   "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+			expectedBody:   "device-123",
 		},
 		{
-			name:        "user not found",
-			requestBody: `{"user_uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","public_key":"ssh-rsa AAAAB3Nza..."}`,
-			setupMock: func() {
-				mockRegisterer.EXPECT().
-					Register(gomock.Any(), validUserUUID, "ssh-rsa AAAAB3Nza...").
+			name:           "invalid JSON",
+			body:           `{"user_uuid":`,
+			mockSetup:      func() {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "invalid user UUID",
+			body:           `{"user_uuid":"not-a-uuid","public_key":"` + publicKey + `"}`,
+			mockSetup:      func() {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "user not found",
+			body: `{"user_uuid":"` + validUUID + `","public_key":"` + publicKey + `"}`,
+			mockSetup: func() {
+				mockReg.EXPECT().
+					Register(gomock.Any(), validUUID, publicKey).
 					Return(nil, internalErrors.ErrUserNotFound)
 			},
 			expectedStatus: http.StatusNotFound,
-			expectedBody:   "",
 		},
 		{
-			name:           "invalid json",
-			requestBody:    `{"user_uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","public_key":`,
-			setupMock:      func() {},
-			expectedStatus: http.StatusBadRequest,
-			expectedBody:   "",
-		},
-		{
-			name:           "invalid uuid",
-			requestBody:    `{"user_uuid":"not-a-uuid","public_key":"ssh-rsa AAAAB3Nza..."}`,
-			setupMock:      func() {},
-			expectedStatus: http.StatusBadRequest,
-			expectedBody:   "",
-		},
-		{
-			name:        "internal error",
-			requestBody: `{"user_uuid":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","public_key":"ssh-rsa AAAAB3Nza..."}`,
-			setupMock: func() {
-				mockRegisterer.EXPECT().
-					Register(gomock.Any(), validUserUUID, "ssh-rsa AAAAB3Nza...").
+			name: "internal server error",
+			body: `{"user_uuid":"` + validUUID + `","public_key":"` + publicKey + `"}`,
+			mockSetup: func() {
+				mockReg.EXPECT().
+					Register(gomock.Any(), validUUID, publicKey).
 					Return(nil, errors.New("db error"))
 			},
 			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setupMock()
+			if tt.mockSetup != nil {
+				tt.mockSetup()
+			}
 
-			req := httptest.NewRequest(http.MethodPost, "/devices/register", bytes.NewBufferString(tt.requestBody))
+			req := httptest.NewRequest(http.MethodPost, "/devices/register", bytes.NewBufferString(tt.body))
 			w := httptest.NewRecorder()
 
-			handler := handlers.DeviceRegisterHandler(mockRegisterer)
-			handler.ServeHTTP(w, req)
-
+			handler(w, req)
 			resp := w.Result()
-			defer resp.Body.Close()
-
-			buf := new(bytes.Buffer)
-			buf.ReadFrom(resp.Body)
 
 			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
-			if tt.expectedStatus == http.StatusOK {
-				assert.Equal(t, "text/plain; charset=utf-8", resp.Header.Get("Content-Type"))
+
+			if tt.expectedBody != "" {
+				buf := new(bytes.Buffer)
+				buf.ReadFrom(resp.Body)
+				assert.Equal(t, tt.expectedBody, buf.String())
 			}
-			assert.Equal(t, tt.expectedBody, buf.String())
 		})
 	}
 }

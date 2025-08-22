@@ -3,11 +3,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"net/http"
 
 	"github.com/google/uuid"
-	"github.com/sbilibin2017/bil-message/internal/configs/log"
+
 	"github.com/sbilibin2017/bil-message/internal/errors"
 )
 
@@ -26,7 +27,7 @@ type DeviceRequest struct {
 
 // DeviceRegisterer определяет интерфейс для регистрации устройства.
 type DeviceRegisterer interface {
-	Register(ctx context.Context, userUUID uuid.UUID, publicKey string) (*uuid.UUID, error)
+	Register(ctx context.Context, userUUID string, publicKey string) (*string, error)
 }
 
 // DeviceRegisterHandler обрабатывает регистрацию устройства и возвращает deviceUUID.
@@ -61,13 +62,13 @@ func DeviceRegisterHandler(
 		}
 
 		// Вызываем регистрацию
-		deviceUUID, err := reg.Register(r.Context(), userUUID, req.PublicKey)
+		deviceUUID, err := reg.Register(r.Context(), userUUID.String(), req.PublicKey)
 		if err != nil {
 			if err == errors.ErrUserNotFound {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
-			log.Log("device register", err)
+			log.Printf("op: %s, err:%s", "device register", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -75,6 +76,6 @@ func DeviceRegisterHandler(
 		// Устанавливаем Content-Type и возвращаем UUID устройства
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(deviceUUID.String()))
+		w.Write([]byte(*deviceUUID))
 	}
 }

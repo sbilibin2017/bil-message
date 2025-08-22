@@ -10,7 +10,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	uuid "github.com/google/uuid"
+	models "github.com/sbilibin2017/bil-message/internal/models"
 )
 
 // MockTokenParser is a mock of TokenParser interface.
@@ -37,10 +37,10 @@ func (m *MockTokenParser) EXPECT() *MockTokenParserMockRecorder {
 }
 
 // GetFromRequest mocks base method.
-func (m *MockTokenParser) GetFromRequest(r *http.Request) (string, error) {
+func (m *MockTokenParser) GetFromRequest(r *http.Request) (*string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFromRequest", r)
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(*string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -52,13 +52,12 @@ func (mr *MockTokenParserMockRecorder) GetFromRequest(r interface{}) *gomock.Cal
 }
 
 // Parse mocks base method.
-func (m *MockTokenParser) Parse(tokenString string) (uuid.UUID, uuid.UUID, error) {
+func (m *MockTokenParser) Parse(tokenString string) (*models.TokenPayload, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Parse", tokenString)
-	ret0, _ := ret[0].(uuid.UUID)
-	ret1, _ := ret[1].(uuid.UUID)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(*models.TokenPayload)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Parse indicates an expected call of Parse.
@@ -68,15 +67,15 @@ func (mr *MockTokenParserMockRecorder) Parse(tokenString interface{}) *gomock.Ca
 }
 
 // SetToContext mocks base method.
-func (m *MockTokenParser) SetToContext(ctx context.Context, userUUID, clientUUID uuid.UUID) context.Context {
+func (m *MockTokenParser) SetToContext(ctx context.Context, payload *models.TokenPayload) context.Context {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetToContext", ctx, userUUID, clientUUID)
+	ret := m.ctrl.Call(m, "SetToContext", ctx, payload)
 	ret0, _ := ret[0].(context.Context)
 	return ret0
 }
 
 // SetToContext indicates an expected call of SetToContext.
-func (mr *MockTokenParserMockRecorder) SetToContext(ctx, userUUID, clientUUID interface{}) *gomock.Call {
+func (mr *MockTokenParserMockRecorder) SetToContext(ctx, payload interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetToContext", reflect.TypeOf((*MockTokenParser)(nil).SetToContext), ctx, userUUID, clientUUID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetToContext", reflect.TypeOf((*MockTokenParser)(nil).SetToContext), ctx, payload)
 }

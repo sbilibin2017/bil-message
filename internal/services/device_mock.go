@@ -9,7 +9,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	uuid "github.com/google/uuid"
 	models "github.com/sbilibin2017/bil-message/internal/models"
 )
 
@@ -37,7 +36,7 @@ func (m *MockDeviceUserReader) EXPECT() *MockDeviceUserReaderMockRecorder {
 }
 
 // GetByUUID mocks base method.
-func (m *MockDeviceUserReader) GetByUUID(ctx context.Context, userUUID uuid.UUID) (*models.UserDB, error) {
+func (m *MockDeviceUserReader) GetByUUID(ctx context.Context, userUUID string) (*models.UserDB, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetByUUID", ctx, userUUID)
 	ret0, _ := ret[0].(*models.UserDB)
@@ -75,15 +74,15 @@ func (m *MockDeviceWriter) EXPECT() *MockDeviceWriterMockRecorder {
 }
 
 // Save mocks base method.
-func (m *MockDeviceWriter) Save(ctx context.Context, deviceUUID, userUUID uuid.UUID, publicKey string) error {
+func (m *MockDeviceWriter) Save(ctx context.Context, device *models.DeviceDB) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, deviceUUID, userUUID, publicKey)
+	ret := m.ctrl.Call(m, "Save", ctx, device)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockDeviceWriterMockRecorder) Save(ctx, deviceUUID, userUUID, publicKey interface{}) *gomock.Call {
+func (mr *MockDeviceWriterMockRecorder) Save(ctx, device interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockDeviceWriter)(nil).Save), ctx, deviceUUID, userUUID, publicKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockDeviceWriter)(nil).Save), ctx, device)
 }

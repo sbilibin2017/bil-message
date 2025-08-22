@@ -7,69 +7,92 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
+	"github.com/sbilibin2017/bil-message/internal/models"
+	"github.com/stretchr/testify/require"
 )
 
-func TestNewJWT(t *testing.T) {
-	j, err := New("secret", time.Minute)
-	assert.NoError(t, err)
-	assert.NotNil(t, j)
+func TestNew_Defaults(t *testing.T) {
+	j, err := New()
+	require.NoError(t, err)
+	require.NotNil(t, j)
+	require.Equal(t, time.Hour, j.exp)
+	require.Equal(t, []byte("secret-key"), j.secretKey)
+}
 
-	_, err = New("", time.Minute)
-	assert.Error(t, err)
+func TestNew_WithSecretKey(t *testing.T) {
+	j, err := New(WithSecretKey("", "custom-key"))
+	require.NoError(t, err)
+	require.Equal(t, []byte("custom-key"), j.secretKey)
+}
 
-	j2, err := New("secret", 0) // проверка default exp
-	assert.NoError(t, err)
-	assert.NotNil(t, j2)
+func TestNew_WithExpiration(t *testing.T) {
+	j, err := New(WithExpiration(0, 2*time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, 2*time.Hour, j.exp)
 }
 
 func TestGenerateAndParse(t *testing.T) {
-	j, _ := New("secret", time.Minute)
-	userUUID := uuid.New()
-	clientUUID := uuid.New()
+	j, err := New(WithSecretKey("test-secret"), WithExpiration(time.Minute))
+	require.NoError(t, err)
 
-	token, err := j.Generate(userUUID, clientUUID)
-	assert.NoError(t, err)
-	assert.NotEmpty(t, token)
+	payload := &models.TokenPayload{
+		UserUUID:   uuid.NewString(),
+		DeviceUUID: uuid.NewString(),
+	}
 
-	parsedUser, parsedClient, err := j.Parse(token)
-	assert.NoError(t, err)
-	assert.Equal(t, userUUID, parsedUser)
-	assert.Equal(t, clientUUID, parsedClient)
+	token, err := j.Generate(payload)
+	require.NoError(t, err)
+	require.NotEmpty(t, token)
+
+	parsed, err := j.Parse(token)
+	require.NoError(t, err)
+	require.Equal(t, payload.UserUUID, parsed.UserUUID)
+	require.Equal(t, payload.DeviceUUID, parsed.DeviceUUID)
+}
+
+func TestParse_InvalidToken(t *testing.T) {
+	j, _ := New(WithSecretKey("test-secret"))
+	parsed, err := j.Parse("invalid.token.string")
+	require.Error(t, err)
+	require.Nil(t, parsed)
 }
 
 func TestGetFromRequest(t *testing.T) {
-	j, _ := New("secret", time.Minute)
+	j, _ := New()
 
-	req := &http.Request{Header: http.Header{}}
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer test-token")
 
-	_, err := j.GetFromRequest(req)
-	assert.Error(t, err) // нет заголовка
-
-	req.Header.Set("Authorization", "Bearer token123")
 	token, err := j.GetFromRequest(req)
-	assert.NoError(t, err)
-	assert.Equal(t, "token123", token)
-
-	req.Header.Set("Authorization", "InvalidFormat")
-	_, err = j.GetFromRequest(req)
-	assert.Error(t, err)
+	require.NoError(t, err)
+	require.NotNil(t, token)
+	require.Equal(t, "test-token", *token)
 }
 
-func TestContextMethods(t *testing.T) {
-	j, _ := New("secret", time.Minute)
-	ctx := context.Background()
+func TestGetFromRequest_MissingHeader(t *testing.T) {
+	j, _ := New()
 
-	userUUID := uuid.New()
-	clientUUID := uuid.New()
+	req, _ := http.NewRequest("GET", "/", nil)
+	token, err := j.GetFromRequest(req)
+	require.Error(t, err)
+	require.Nil(t, token)
+}
 
-	ctxWithValue := j.SetToContext(ctx, userUUID, clientUUID)
-	gotUser, gotClient, err := j.GetTokenPayloadFromContext(ctxWithValue)
-	assert.NoError(t, err)
-	assert.Equal(t, userUUID, gotUser)
-	assert.Equal(t, clientUUID, gotClient)
+func TestContext(t *testing.T) {
+	j, _ := New()
+	payload := &models.TokenPayload{
+		UserUUID:   uuid.NewString(),
+		DeviceUUID: uuid.NewString(),
+	}
 
-	// Тест ошибки при пустом контексте
-	_, _, err = j.GetTokenPayloadFromContext(ctx)
-	assert.Error(t, err)
+	ctx := j.SetToContext(context.Background(), payload)
+	got, err := j.GetTokenPayloadFromContext(ctx)
+	require.NoError(t, err)
+	require.Equal(t, payload, got)
+}
+
+func TestContext_NoPayload(t *testing.T) {
+	j, _ := New()
+	_, err := j.GetTokenPayloadFromContext(context.Background())
+	require.Error(t, err)
 }

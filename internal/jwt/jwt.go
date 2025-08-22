@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
+	"github.com/sbilibin2017/bil-message/internal/models"
 )
 
 type contextKey string
@@ -21,59 +21,84 @@ type JWT struct {
 	exp       time.Duration
 }
 
-// New создаёт новый JWT с указанным секретным ключом и временем жизни токена.
-func New(secretKey string, exp time.Duration) (*JWT, error) {
-	if secretKey == "" {
-		return nil, errors.New("secret key cannot be empty")
+// Opt — функциональная опция для настройки JWT.
+type Opt func(*JWT) error
+
+// New создаёт новый JWT, применяя указанные опции.
+func New(opts ...Opt) (*JWT, error) {
+	j := &JWT{
+		secretKey: []byte("secret-key"),
+		exp:       time.Hour,
 	}
-	if exp <= 0 {
-		exp = time.Hour
+	for _, opt := range opts {
+		if err := opt(j); err != nil {
+			return nil, err
+		}
 	}
-	return &JWT{
-		secretKey: []byte(secretKey),
-		exp:       exp,
-	}, nil
+	return j, nil
 }
 
-type claimsStruct struct {
-	UserUUID   string `json:"user_uuid"`
-	ClientUUID string `json:"client_uuid"`
-	jwt.RegisteredClaims
+// WithSecretKey задаёт секретный ключ.
+// Используется первое непустое значение.
+func WithSecretKey(secret ...string) Opt {
+	return func(j *JWT) error {
+		for _, s := range secret {
+			if s != "" {
+				j.secretKey = []byte(s)
+				return nil
+			}
+		}
+		return nil
+	}
 }
 
-// Generate создаёт JWT токен на основе userUUID и clientUUID.
-func (j *JWT) Generate(userUUID uuid.UUID, clientUUID uuid.UUID) (string, error) {
-	claims := claimsStruct{
-		UserUUID:   userUUID.String(),
-		ClientUUID: clientUUID.String(),
+// WithExpiration задаёт время жизни токена.
+// Используется первое положительное значение.
+func WithExpiration(exp ...time.Duration) Opt {
+	return func(j *JWT) error {
+		for _, e := range exp {
+			if e > 0 {
+				j.exp = e
+				return nil
+			}
+		}
+		return nil
+	}
+}
+
+// Generate создаёт JWT-токен на основе TokenPayload.
+func (j *JWT) Generate(payload *models.TokenPayload) (string, error) {
+	c := models.Claims{
+		UserUUID:   payload.UserUUID,
+		DeviceUUID: payload.DeviceUUID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(j.exp)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	return token.SignedString(j.secretKey)
 }
 
 // GetFromRequest извлекает JWT токен из заголовка Authorization запроса.
-func (j *JWT) GetFromRequest(r *http.Request) (string, error) {
+func (j *JWT) GetFromRequest(r *http.Request) (*string, error) {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
-		return "", errors.New("missing Authorization header")
+		return nil, errors.New("missing Authorization header")
 	}
 
 	parts := strings.Split(authHeader, " ")
 	if len(parts) != 2 || parts[0] != "Bearer" {
-		return "", errors.New("invalid Authorization header format")
+		return nil, errors.New("invalid Authorization header format")
 	}
 
-	return parts[1], nil
+	return &parts[1], nil
 }
 
-// Parse проверяет токен и возвращает userUUID и clientUUID.
-func (j *JWT) Parse(tokenString string) (userUUID uuid.UUID, clientUUID uuid.UUID, err error) {
-	claims := &claimsStruct{}
+// Parse проверяет токен и возвращает TokenPayload.
+func (j *JWT) Parse(tokenString string) (*models.TokenPayload, error) {
+	claims := &models.Claims{}
 
 	token, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (any, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -82,38 +107,31 @@ func (j *JWT) Parse(tokenString string) (userUUID uuid.UUID, clientUUID uuid.UUI
 		return j.secretKey, nil
 	})
 	if err != nil || !token.Valid {
-		return uuid.Nil, uuid.Nil, errors.New("invalid token")
+		return nil, errors.New("invalid token")
 	}
 
-	userUUID, err = uuid.Parse(claims.UserUUID)
-	if err != nil {
-		return uuid.Nil, uuid.Nil, err
-	}
-
-	clientUUID, err = uuid.Parse(claims.ClientUUID)
-	if err != nil {
-		return uuid.Nil, uuid.Nil, err
-	}
-
-	return userUUID, clientUUID, nil
+	return &models.TokenPayload{
+		UserUUID:   claims.UserUUID,
+		DeviceUUID: claims.DeviceUUID,
+	}, nil
 }
 
-// SetToContext сохраняет userUUID и clientUUID напрямую в контекст.
-func (j *JWT) SetToContext(ctx context.Context, userUUID uuid.UUID, clientUUID uuid.UUID) context.Context {
-	return context.WithValue(ctx, userCtxKey, [2]uuid.UUID{userUUID, clientUUID})
+// SetToContext сохраняет TokenPayload в контекст.
+func (j *JWT) SetToContext(ctx context.Context, payload *models.TokenPayload) context.Context {
+	return context.WithValue(ctx, userCtxKey, payload)
 }
 
-// GetTokenPayloadFromContext извлекает userUUID и clientUUID напрямую из контекста.
-func (j *JWT) GetTokenPayloadFromContext(ctx context.Context) (userUUID uuid.UUID, clientUUID uuid.UUID, err error) {
+// GetTokenPayloadFromContext извлекает TokenPayload из контекста.
+func (j *JWT) GetTokenPayloadFromContext(ctx context.Context) (*models.TokenPayload, error) {
 	value := ctx.Value(userCtxKey)
 	if value == nil {
-		return uuid.Nil, uuid.Nil, errors.New("no token payload in context")
+		return nil, errors.New("no token payload in context")
 	}
 
-	uuids, ok := value.([2]uuid.UUID)
+	payload, ok := value.(*models.TokenPayload)
 	if !ok {
-		return uuid.Nil, uuid.Nil, errors.New("invalid token payload type")
+		return nil, errors.New("invalid token payload type")
 	}
 
-	return uuids[0], uuids[1], nil
+	return payload, nil
 }

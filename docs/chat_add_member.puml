@@ -1,0 +1,19 @@
+@startuml
+actor User
+participant "Web Client" as Client
+participant "HTTP Server" as Server
+participant "JWT Parser" as JWT
+participant "Chat Service" as ChatSvc
+
+User -> Client : Выбирает чат и пользователя
+Client -> Server : POST /chats/{chat-uuid}/members/{user-uuid} (с JWT)
+Server -> JWT : GetFromRequest()
+JWT --> Server : token
+Server -> JWT : Parse(token)
+JWT --> Server : TokenPayload {userUUID}
+
+Server -> ChatSvc : AddMember(chatUUID, userUUID)
+ChatSvc --> Server : success
+
+Server --> Client : HTTP 200 OK
+@enduml
