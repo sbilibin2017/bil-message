@@ -5,29 +5,31 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/websocket"
-	"github.com/sbilibin2017/bil-message/internal/models"
 )
 
 // JWTParser отвечает за работу с JWT-токенами.
 type JWTParser interface {
-	// GetFromRequest извлекает токен из HTTP-запроса.
-	GetFromRequest(r *http.Request) (*string, error)
-	// Parse проверяет токен и возвращает UUID пользователя и клиента.
-	Parse(tokenString string) (*models.TokenPayload, error)
+	GetFromRequest(r *http.Request) (string, error)
+	GetUserUUID(tokenString string) (string, error)
 }
 
 // ChatCreator интерфейс для создания чатов.
 type ChatCreator interface {
-	// CreateChat создаёт новый чат с создателем creatorUUID.
-	CreateChat(ctx context.Context, userUUID string) (*string, error)
+	CreateChat(
+		ctx context.Context,
+		createdByUUID string,
+	) (chatUUID string, err error)
 }
 
 // ChatMemberAdder интерфейс для добавления участников в чат.
 type ChatMemberAdder interface {
-	// AddMember добавляет пользователя userUUID в чат chatUUID.
-	AddMember(ctx context.Context, chatUUID string, userUUID string) error
+	AddMember(
+		ctx context.Context,
+		chatUUID string,
+		participantUUID string,
+	) error
 }
 
 // NewCreateChatHandler создаёт HTTP-обработчик для создания нового чата.
@@ -39,13 +41,13 @@ func NewCreateChatHandler(jwtParser JWTParser, svc ChatCreator) http.HandlerFunc
 			return
 		}
 
-		payload, err := jwtParser.Parse(*token)
+		userUUID, err := jwtParser.GetUserUUID(token)
 		if err != nil {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
-		chatUUID, err := svc.CreateChat(r.Context(), payload.UserUUID)
+		chatUUID, err := svc.CreateChat(r.Context(), userUUID)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -53,7 +55,7 @@ func NewCreateChatHandler(jwtParser JWTParser, svc ChatCreator) http.HandlerFunc
 
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(*chatUUID))
+		w.Write([]byte(chatUUID))
 	}
 }
 
@@ -66,15 +68,14 @@ func NewAddMemberHandler(jwtParser JWTParser, svc ChatMemberAdder) http.HandlerF
 			return
 		}
 
-		if _, err := jwtParser.Parse(*token); err != nil {
+		userUUID, err := jwtParser.GetUserUUID(token)
+		if err != nil {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
 		chatUUID := chi.URLParam(r, "chat-uuid")
-		userUUID := chi.URLParam(r, "user-uuid")
-
-		if chatUUID == "" || userUUID == "" {
+		if chatUUID == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -88,37 +89,54 @@ func NewAddMemberHandler(jwtParser JWTParser, svc ChatMemberAdder) http.HandlerF
 	}
 }
 
+// ChatReader интерфейс для чтения информации о чате
+type ChatReader interface {
+	IsMember(
+		ctx context.Context,
+		chatUUID string,
+		userUUID string,
+	) (bool, error)
+}
+
 // upgrader настраивает WebSocket соединение.
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
-// NewChatWSHandler создаёт HTTP-обработчик для WebSocket чата.
-// Использует JWTParser для аутентификации пользователя и хранит подключения в памяти.
-func NewChatWSHandler(jwtParser JWTParser) http.HandlerFunc {
-	// Хранилище комнат: chatUUID -> map[userUUID]*websocket.Conn
+// NewChatWSHandler создаёт HTTP-обработчик для WebSocket чата с проверкой участников.
+func NewChatWSHandler(jwtParser JWTParser, chatReader ChatReader) http.HandlerFunc {
 	rooms := make(map[string]map[string]*websocket.Conn)
 	var roomsMux sync.RWMutex
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Извлекаем токен
+		// JWT
 		token, err := jwtParser.GetFromRequest(r)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		// Парсим токен
-		payload, err := jwtParser.Parse(*token)
+		userUUID, err := jwtParser.GetUserUUID(token)
 		if err != nil {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
-		// Получаем UUID чата из URL
+		// Chat UUID
 		chatUUID := chi.URLParam(r, "chat-uuid")
 		if chatUUID == "" {
 			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		// Проверяем, что пользователь действительно участник чата
+		isMember, err := chatReader.IsMember(r.Context(), chatUUID, userUUID)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if !isMember {
+			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 
@@ -130,10 +148,9 @@ func NewChatWSHandler(jwtParser JWTParser) http.HandlerFunc {
 		}
 		defer func() {
 			conn.Close()
-			// Удаляем пользователя из комнаты при отключении
 			roomsMux.Lock()
 			if conns, ok := rooms[chatUUID]; ok {
-				delete(conns, payload.UserUUID)
+				delete(conns, userUUID)
 				if len(conns) == 0 {
 					delete(rooms, chatUUID)
 				}
@@ -146,10 +163,10 @@ func NewChatWSHandler(jwtParser JWTParser) http.HandlerFunc {
 		if _, ok := rooms[chatUUID]; !ok {
 			rooms[chatUUID] = make(map[string]*websocket.Conn)
 		}
-		rooms[chatUUID][payload.UserUUID] = conn
+		rooms[chatUUID][userUUID] = conn
 		roomsMux.Unlock()
 
-		// Основной цикл чтения и пересылки сообщений
+		// Основной цикл получения и пересылки сообщений
 		for {
 			var msg struct {
 				Message string `json:"message"`
@@ -158,11 +175,10 @@ func NewChatWSHandler(jwtParser JWTParser) http.HandlerFunc {
 				break
 			}
 
-			// Рассылаем сообщение всем участникам кроме отправителя
 			roomsMux.RLock()
 			for id, c := range rooms[chatUUID] {
-				if id != payload.UserUUID {
-					c.WriteJSON(msg)
+				if id != userUUID {
+					_ = c.WriteJSON(msg)
 				}
 			}
 			roomsMux.RUnlock()

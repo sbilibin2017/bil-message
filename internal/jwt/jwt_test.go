@@ -1,98 +1,85 @@
-package jwt
+package jwt_test
 
 import (
-	"context"
 	"net/http"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
-	"github.com/sbilibin2017/bil-message/internal/models"
-	"github.com/stretchr/testify/require"
+	"github.com/sbilibin2017/bil-message/internal/jwt"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestNew_Defaults(t *testing.T) {
-	j, err := New()
-	require.NoError(t, err)
-	require.NotNil(t, j)
-	require.Equal(t, time.Hour, j.exp)
-	require.Equal(t, []byte("secret-key"), j.secretKey)
+func TestWithSecretKey(t *testing.T) {
+	// Создаём новый JWT с дефолтным ключом
+	_, err := jwt.New()
+	assert.NoError(t, err)
+
+	// Создаём новый JWT с опцией WithSecretKey
+	secret := "my-secret-key"
+	_, err = jwt.New(jwt.WithSecretKey(secret))
+	assert.NoError(t, err)
+
+	// Если передать несколько значений, берётся первое непустое
+	_, err = jwt.New(jwt.WithSecretKey("", "", "first-non-empty", "ignored"))
+	assert.NoError(t, err)
+
+	// Если все значения пустые, ключ остаётся по умолчанию
+	_, err = jwt.New(jwt.WithSecretKey("", ""))
+	assert.NoError(t, err)
 }
 
-func TestNew_WithSecretKey(t *testing.T) {
-	j, err := New(WithSecretKey("", "custom-key"))
-	require.NoError(t, err)
-	require.Equal(t, []byte("custom-key"), j.secretKey)
+func TestJWT_GenerateAndParse(t *testing.T) {
+	j, err := jwt.New()
+	assert.NoError(t, err)
+
+	userUUID := "user-123"
+
+	// Генерация токена
+	tokenStr, err := j.Generate(userUUID)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, tokenStr)
+
+	// Разбор токена
+	parsedUUID, err := j.GetUserUUID(tokenStr)
+	assert.NoError(t, err)
+	assert.Equal(t, userUUID, parsedUUID)
 }
 
-func TestNew_WithExpiration(t *testing.T) {
-	j, err := New(WithExpiration(0, 2*time.Hour))
-	require.NoError(t, err)
-	require.Equal(t, 2*time.Hour, j.exp)
-}
+func TestJWT_GetFromRequest(t *testing.T) {
+	j, _ := jwt.New()
+	userUUID := "user-123"
+	tokenStr, _ := j.Generate(userUUID)
 
-func TestGenerateAndParse(t *testing.T) {
-	j, err := New(WithSecretKey("test-secret"), WithExpiration(time.Minute))
-	require.NoError(t, err)
-
-	payload := &models.TokenPayload{
-		UserUUID:   uuid.NewString(),
-		DeviceUUID: uuid.NewString(),
+	req := &http.Request{
+		Header: map[string][]string{
+			"Authorization": {"Bearer " + tokenStr},
+		},
 	}
 
-	token, err := j.Generate(payload)
-	require.NoError(t, err)
-	require.NotEmpty(t, token)
-
-	parsed, err := j.Parse(token)
-	require.NoError(t, err)
-	require.Equal(t, payload.UserUUID, parsed.UserUUID)
-	require.Equal(t, payload.DeviceUUID, parsed.DeviceUUID)
+	got, err := j.GetFromRequest(req)
+	assert.NoError(t, err)
+	assert.Equal(t, tokenStr, got)
 }
 
-func TestParse_InvalidToken(t *testing.T) {
-	j, _ := New(WithSecretKey("test-secret"))
-	parsed, err := j.Parse("invalid.token.string")
-	require.Error(t, err)
-	require.Nil(t, parsed)
+func TestJWT_GetUserUUID_InvalidToken(t *testing.T) {
+	j, _ := jwt.New()
+	invalidToken := "invalid.token.value"
+
+	got, err := j.GetUserUUID(invalidToken)
+	assert.Error(t, err)
+	assert.Empty(t, got)
 }
 
-func TestGetFromRequest(t *testing.T) {
-	j, _ := New()
+func TestJWT_ExpiredToken(t *testing.T) {
+	j, _ := jwt.New(jwt.WithExpiration(1 * time.Millisecond))
+	userUUID := "user-expired"
 
-	req, _ := http.NewRequest("GET", "/", nil)
-	req.Header.Set("Authorization", "Bearer test-token")
+	tokenStr, err := j.Generate(userUUID)
+	assert.NoError(t, err)
 
-	token, err := j.GetFromRequest(req)
-	require.NoError(t, err)
-	require.NotNil(t, token)
-	require.Equal(t, "test-token", *token)
-}
+	time.Sleep(2 * time.Millisecond) // ждем истечения срока
 
-func TestGetFromRequest_MissingHeader(t *testing.T) {
-	j, _ := New()
-
-	req, _ := http.NewRequest("GET", "/", nil)
-	token, err := j.GetFromRequest(req)
-	require.Error(t, err)
-	require.Nil(t, token)
-}
-
-func TestContext(t *testing.T) {
-	j, _ := New()
-	payload := &models.TokenPayload{
-		UserUUID:   uuid.NewString(),
-		DeviceUUID: uuid.NewString(),
-	}
-
-	ctx := j.SetToContext(context.Background(), payload)
-	got, err := j.GetTokenPayloadFromContext(ctx)
-	require.NoError(t, err)
-	require.Equal(t, payload, got)
-}
-
-func TestContext_NoPayload(t *testing.T) {
-	j, _ := New()
-	_, err := j.GetTokenPayloadFromContext(context.Background())
-	require.Error(t, err)
+	got, err := j.GetUserUUID(tokenStr)
+	assert.Error(t, err)
+	assert.Empty(t, got)
 }

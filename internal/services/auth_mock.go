@@ -35,34 +35,19 @@ func (m *MockUserReader) EXPECT() *MockUserReaderMockRecorder {
 	return m.recorder
 }
 
-// GetByUUID mocks base method.
-func (m *MockUserReader) GetByUUID(ctx context.Context, userUUID string) (*models.UserDB, error) {
+// Get mocks base method.
+func (m *MockUserReader) Get(ctx context.Context, username string) (*models.UserDB, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetByUUID", ctx, userUUID)
+	ret := m.ctrl.Call(m, "Get", ctx, username)
 	ret0, _ := ret[0].(*models.UserDB)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetByUUID indicates an expected call of GetByUUID.
-func (mr *MockUserReaderMockRecorder) GetByUUID(ctx, userUUID interface{}) *gomock.Call {
+// Get indicates an expected call of Get.
+func (mr *MockUserReaderMockRecorder) Get(ctx, username interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUUID", reflect.TypeOf((*MockUserReader)(nil).GetByUUID), ctx, userUUID)
-}
-
-// GetByUsername mocks base method.
-func (m *MockUserReader) GetByUsername(ctx context.Context, username string) (*models.UserDB, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetByUsername", ctx, username)
-	ret0, _ := ret[0].(*models.UserDB)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetByUsername indicates an expected call of GetByUsername.
-func (mr *MockUserReaderMockRecorder) GetByUsername(ctx, username interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUsername", reflect.TypeOf((*MockUserReader)(nil).GetByUsername), ctx, username)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockUserReader)(nil).Get), ctx, username)
 }
 
 // MockUserWriter is a mock of UserWriter interface.
@@ -89,55 +74,17 @@ func (m *MockUserWriter) EXPECT() *MockUserWriterMockRecorder {
 }
 
 // Save mocks base method.
-func (m *MockUserWriter) Save(ctx context.Context, user *models.UserDB) error {
+func (m *MockUserWriter) Save(ctx context.Context, userUUID, username, password_hash string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, user)
+	ret := m.ctrl.Call(m, "Save", ctx, userUUID, username, password_hash)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockUserWriterMockRecorder) Save(ctx, user interface{}) *gomock.Call {
+func (mr *MockUserWriterMockRecorder) Save(ctx, userUUID, username, password_hash interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockUserWriter)(nil).Save), ctx, user)
-}
-
-// MockDeviceReader is a mock of DeviceReader interface.
-type MockDeviceReader struct {
-	ctrl     *gomock.Controller
-	recorder *MockDeviceReaderMockRecorder
-}
-
-// MockDeviceReaderMockRecorder is the mock recorder for MockDeviceReader.
-type MockDeviceReaderMockRecorder struct {
-	mock *MockDeviceReader
-}
-
-// NewMockDeviceReader creates a new mock instance.
-func NewMockDeviceReader(ctrl *gomock.Controller) *MockDeviceReader {
-	mock := &MockDeviceReader{ctrl: ctrl}
-	mock.recorder = &MockDeviceReaderMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDeviceReader) EXPECT() *MockDeviceReaderMockRecorder {
-	return m.recorder
-}
-
-// GetByUUID mocks base method.
-func (m *MockDeviceReader) GetByUUID(ctx context.Context, deviceUUID string) (*models.DeviceDB, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetByUUID", ctx, deviceUUID)
-	ret0, _ := ret[0].(*models.DeviceDB)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetByUUID indicates an expected call of GetByUUID.
-func (mr *MockDeviceReaderMockRecorder) GetByUUID(ctx, deviceUUID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUUID", reflect.TypeOf((*MockDeviceReader)(nil).GetByUUID), ctx, deviceUUID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockUserWriter)(nil).Save), ctx, userUUID, username, password_hash)
 }
 
 // MockTokenGenerator is a mock of TokenGenerator interface.
@@ -164,16 +111,16 @@ func (m *MockTokenGenerator) EXPECT() *MockTokenGeneratorMockRecorder {
 }
 
 // Generate mocks base method.
-func (m *MockTokenGenerator) Generate(payload *models.TokenPayload) (string, error) {
+func (m *MockTokenGenerator) Generate(userUUID string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Generate", payload)
+	ret := m.ctrl.Call(m, "Generate", userUUID)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Generate indicates an expected call of Generate.
-func (mr *MockTokenGeneratorMockRecorder) Generate(payload interface{}) *gomock.Call {
+func (mr *MockTokenGeneratorMockRecorder) Generate(userUUID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Generate", reflect.TypeOf((*MockTokenGenerator)(nil).Generate), payload)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Generate", reflect.TypeOf((*MockTokenGenerator)(nil).Generate), userUUID)
 }

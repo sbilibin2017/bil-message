@@ -2,14 +2,14 @@ package handlers
 
 import (
 	"bytes"
-	"errors"
+	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
-	internalErrors "github.com/sbilibin2017/bil-message/internal/errors"
+	"github.com/sbilibin2017/bil-message/internal/errors"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,144 +20,141 @@ func TestRegisterHandler(t *testing.T) {
 	mockReg := NewMockRegisterer(ctrl)
 	handler := RegisterHandler(mockReg)
 
-	username := "user123"
-	password := "P@ssw0rd"
-	userUUID := uuid.New()
-
-	tests := []struct {
-		name           string
-		body           string
-		mockSetup      func()
-		expectedStatus int
-		expectedBody   string
-	}{
-		{
-			name: `successful registration`,
-			body: `{"username":"` + username + `","password":"` + password + `"}`,
-			mockSetup: func() {
-				mockReg.EXPECT().Register(gomock.Any(), username, password).Return(userUUID.String(), nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedBody:   userUUID.String(),
-		},
-		{
-			name:           "invalid JSON",
-			body:           `{"username":`,
-			mockSetup:      func() {},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: `user already exists`,
-			body: `{"username":"` + username + `","password":"` + password + `"}`,
-			mockSetup: func() {
-				mockReg.EXPECT().Register(gomock.Any(), username, password).Return("", internalErrors.ErrUserAlreadyExists)
-			},
-			expectedStatus: http.StatusConflict,
-		},
-		{
-			name: `internal server error`,
-			body: `{"username":"` + username + `","password":"` + password + `"}`,
-			mockSetup: func() {
-				mockReg.EXPECT().Register(gomock.Any(), username, password).Return("", errors.New("db error"))
-			},
-			expectedStatus: http.StatusInternalServerError,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.mockSetup != nil {
-				tt.mockSetup()
-			}
-
-			req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewBufferString(tt.body))
-			w := httptest.NewRecorder()
-
-			handler(w, req)
-			resp := w.Result()
-
-			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
-
-			if tt.expectedBody != "" {
-				buf := new(bytes.Buffer)
-				buf.ReadFrom(resp.Body)
-				assert.Equal(t, tt.expectedBody, buf.String())
-			}
+	t.Run("success", func(t *testing.T) {
+		reqBody, _ := json.Marshal(RegisterRequest{
+			Username: "user1",
+			Password: "pass123",
 		})
-	}
+
+		mockReg.EXPECT().
+			Register(gomock.Any(), "user1", "pass123").
+			Return("test-token", nil)
+
+		req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(reqBody))
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		resp := w.Result()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "Bearer test-token", resp.Header.Get("Authorization"))
+	})
+
+	t.Run("bad request - invalid JSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader([]byte("{invalid-json")))
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("conflict - user already exists", func(t *testing.T) {
+		reqBody, _ := json.Marshal(RegisterRequest{
+			Username: "user1",
+			Password: "pass123",
+		})
+
+		mockReg.EXPECT().
+			Register(gomock.Any(), "user1", "pass123").
+			Return("", errors.ErrUserAlreadyExists)
+
+		req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(reqBody))
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusConflict, w.Code)
+	})
+
+	t.Run("internal error", func(t *testing.T) {
+		reqBody, _ := json.Marshal(RegisterRequest{
+			Username: "user1",
+			Password: "pass123",
+		})
+
+		mockReg.EXPECT().
+			Register(gomock.Any(), "user1", "pass123").
+			Return("", context.DeadlineExceeded)
+
+		req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(reqBody))
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestLoginHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockLogin := NewMockLoginer(ctrl)
-	handler := LoginHandler(mockLogin)
+	mockLoginer := NewMockLoginer(ctrl)
+	handler := LoginHandler(mockLoginer)
 
-	username := "user123"
-	password := "P@ssw0rd"
-	deviceUUID := uuid.New().String()
-	token := "token123"
-
-	tests := []struct {
-		name           string
-		body           string
-		mockSetup      func()
-		expectedStatus int
-		expectedHeader map[string]string
-	}{
-		{
-			name: `successful login`,
-			body: `{"username":"` + username + `","password":"` + password + `","device_uuid":"` + deviceUUID + `"}`,
-			mockSetup: func() {
-				mockLogin.EXPECT().Login(gomock.Any(), username, password, deviceUUID).Return(token, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedHeader: map[string]string{"Authorization": "Bearer " + token},
-		},
-		{
-			name:           "invalid JSON",
-			body:           `{"username":`,
-			mockSetup:      func() {},
-			expectedStatus: http.StatusBadRequest,
-		},
-		{
-			name: `unauthorized user`,
-			body: `{"username":"` + username + `","password":"` + password + `","device_uuid":"` + deviceUUID + `"}`,
-			mockSetup: func() {
-				mockLogin.EXPECT().Login(gomock.Any(), username, password, deviceUUID).Return("", internalErrors.ErrUserNotFound)
-			},
-			expectedStatus: http.StatusUnauthorized,
-		},
-		{
-			name: `internal server error`,
-			body: `{"username":"` + username + `","password":"` + password + `","device_uuid":"` + deviceUUID + `"}`,
-			mockSetup: func() {
-				mockLogin.EXPECT().Login(gomock.Any(), username, password, deviceUUID).Return("", errors.New("db error"))
-			},
-			expectedStatus: http.StatusInternalServerError,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.mockSetup != nil {
-				tt.mockSetup()
-			}
-
-			req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBufferString(tt.body))
-			w := httptest.NewRecorder()
-
-			handler(w, req)
-			resp := w.Result()
-
-			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
-
-			if tt.expectedHeader != nil {
-				for k, v := range tt.expectedHeader {
-					assert.Equal(t, v, resp.Header.Get(k))
-				}
-			}
+	t.Run("success", func(t *testing.T) {
+		reqBody, _ := json.Marshal(LoginRequest{
+			Username: "user1",
+			Password: "pass123",
 		})
-	}
+
+		mockLoginer.EXPECT().
+			Login(gomock.Any(), "user1", "pass123").
+			Return("test-token", nil)
+
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(reqBody))
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		resp := w.Result()
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "Bearer test-token", resp.Header.Get("Authorization"))
+	})
+
+	t.Run("bad request - invalid JSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader([]byte("{invalid-json")))
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("unauthorized - user not found", func(t *testing.T) {
+		reqBody, _ := json.Marshal(LoginRequest{
+			Username: "user1",
+			Password: "pass123",
+		})
+
+		mockLoginer.EXPECT().
+			Login(gomock.Any(), "user1", "pass123").
+			Return("", errors.ErrUserNotFound)
+
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(reqBody))
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("internal error", func(t *testing.T) {
+		reqBody, _ := json.Marshal(LoginRequest{
+			Username: "user1",
+			Password: "pass123",
+		})
+
+		mockLoginer.EXPECT().
+			Login(gomock.Any(), "user1", "pass123").
+			Return("", context.DeadlineExceeded)
+
+		req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(reqBody))
+		w := httptest.NewRecorder()
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }

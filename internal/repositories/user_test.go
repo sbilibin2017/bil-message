@@ -9,16 +9,12 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/sbilibin2017/bil-message/internal/models"
 	_ "modernc.org/sqlite"
 )
 
-// setupTestDB создаёт in-memory SQLite БД с таблицей users
 func setupTestDB(t *testing.T) *sqlx.DB {
 	db, err := sqlx.Connect("sqlite", ":memory:")
-	if err != nil {
-		t.Fatalf("failed to connect to sqlite: %v", err)
-	}
+	assert.NoError(t, err)
 
 	schema := `
 	CREATE TABLE users (
@@ -31,10 +27,7 @@ func setupTestDB(t *testing.T) *sqlx.DB {
 	);
 	`
 	_, err = db.Exec(schema)
-	if err != nil {
-		t.Fatalf("failed to create users table: %v", err)
-	}
-
+	assert.NoError(t, err)
 	return db
 }
 
@@ -50,18 +43,12 @@ func TestUserWriteAndRead(t *testing.T) {
 	username := "testuser"
 	passwordHash := "hash123"
 
-	user := &models.UserDB{
-		UserUUID:     userUUID,
-		Username:     username,
-		PasswordHash: passwordHash,
-	}
-
-	// Save user
-	err := writeRepo.Save(ctx, user)
+	// Сохраняем пользователя
+	err := writeRepo.Save(ctx, userUUID, username, passwordHash)
 	assert.NoError(t, err)
 
-	// Get user
-	got, err := readRepo.GetByUsername(ctx, username)
+	// Читаем по username
+	got, err := readRepo.Get(ctx, username)
 	assert.NoError(t, err)
 	assert.NotNil(t, got)
 	assert.Equal(t, userUUID, got.UserUUID)
@@ -84,22 +71,15 @@ func TestUserWrite_UpdateExisting(t *testing.T) {
 	passwordHash1 := "hash1"
 	passwordHash2 := "hash2"
 
-	user := &models.UserDB{
-		UserUUID:     userUUID,
-		Username:     username,
-		PasswordHash: passwordHash1,
-	}
-
-	// First save
-	err := writeRepo.Save(ctx, user)
+	// Первый сохраненный пользователь
+	err := writeRepo.Save(ctx, userUUID, username, passwordHash1)
 	assert.NoError(t, err)
 
-	// Update existing user
-	user.PasswordHash = passwordHash2
-	err = writeRepo.Save(ctx, user)
+	// Обновляем пароль
+	err = writeRepo.Save(ctx, userUUID, username, passwordHash2)
 	assert.NoError(t, err)
 
-	got, err := readRepo.GetByUsername(ctx, username)
+	got, err := readRepo.Get(ctx, username)
 	assert.NoError(t, err)
 	assert.NotNil(t, got)
 	assert.Equal(t, passwordHash2, got.PasswordHash)
@@ -112,8 +92,7 @@ func TestUserRead_NotFound(t *testing.T) {
 	defer db.Close()
 
 	readRepo := NewUserReadRepository(db)
-
-	got, err := readRepo.GetByUsername(ctx, "nonexistent")
+	got, err := readRepo.Get(ctx, "nonexistent")
 	assert.NoError(t, err)
 	assert.Nil(t, got)
 }
@@ -124,55 +103,12 @@ func TestUserRead_GetByUUID(t *testing.T) {
 	defer db.Close()
 
 	writeRepo := NewUserWriteRepository(db)
-	readRepo := NewUserReadRepository(db)
 
 	userUUID := uuid.New().String()
 	username := "uuiduser"
 	passwordHash := "uuidhash"
 
-	user := &models.UserDB{
-		UserUUID:     userUUID,
-		Username:     username,
-		PasswordHash: passwordHash,
-	}
-
-	err := writeRepo.Save(ctx, user)
+	err := writeRepo.Save(ctx, userUUID, username, passwordHash)
 	assert.NoError(t, err)
 
-	got, err := readRepo.GetByUUID(ctx, userUUID)
-	assert.NoError(t, err)
-	assert.NotNil(t, got)
-	assert.Equal(t, userUUID, got.UserUUID)
-	assert.Equal(t, username, got.Username)
-	assert.Equal(t, passwordHash, got.PasswordHash)
-}
-
-func TestUserRead_GetByUUID_NotFound(t *testing.T) {
-	ctx := context.Background()
-	db := setupTestDB(t)
-	defer db.Close()
-
-	readRepo := NewUserReadRepository(db)
-
-	randomUUID := uuid.New().String()
-	got, err := readRepo.GetByUUID(ctx, randomUUID)
-	assert.NoError(t, err)
-	assert.Nil(t, got)
-}
-
-func TestUserRead_GetByUUID_Error(t *testing.T) {
-	ctx := context.Background()
-	db := setupTestDB(t)
-	defer db.Close()
-
-	readRepo := NewUserReadRepository(db)
-
-	// ломаем таблицу
-	_, err := db.Exec(`DROP TABLE users`)
-	assert.NoError(t, err)
-
-	randomUUID := uuid.New().String()
-	got, err := readRepo.GetByUUID(ctx, randomUUID)
-	assert.Error(t, err)
-	assert.Nil(t, got)
 }

@@ -22,6 +22,7 @@ func setupChatTestDB(t *testing.T) *sqlx.DB {
 	schema := `
 	CREATE TABLE chats (
 		chat_uuid TEXT PRIMARY KEY,
+		participants_uuids TEXT NOT NULL,
 		created_by_uuid TEXT NOT NULL,
 		created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -42,24 +43,21 @@ func TestChatWrite_Save(t *testing.T) {
 
 	repo := NewChatWriteRepository(db)
 
-	chatUUID := uuid.New()
-	createdByUUID := uuid.New()
+	chatUUID := uuid.New().String()
+	createdByUUID := uuid.New().String()
+	participants := createdByUUID + ",user2,user3"
 
-	chat := &models.ChatDB{
-		ChatUUID:      chatUUID.String(),
-		CreatedByUUID: createdByUUID.String(),
-	}
-
-	// Сохраняем новый чат
-	err := repo.Save(ctx, chat)
+	err := repo.Save(ctx, chatUUID, createdByUUID, participants)
 	assert.NoError(t, err)
 
-	// Проверяем запись в БД
 	var got models.ChatDB
-	err = db.Get(&got, "SELECT chat_uuid, created_by_uuid, created_at, updated_at FROM chats WHERE chat_uuid = ?", chatUUID.String())
+	err = db.Get(&got, `
+		SELECT chat_uuid, participants_uuids, created_by_uuid, created_at, updated_at
+		FROM chats WHERE chat_uuid = ?`, chatUUID)
 	assert.NoError(t, err)
-	assert.Equal(t, chatUUID.String(), got.ChatUUID)
-	assert.Equal(t, createdByUUID.String(), got.CreatedByUUID)
+	assert.Equal(t, chatUUID, got.ChatUUID)
+	assert.Equal(t, createdByUUID, got.CreatedByUUID)
+	assert.Equal(t, participants, got.ParticipantsUUIDs)
 	assert.WithinDuration(t, time.Now(), got.CreatedAt, time.Second)
 	assert.WithinDuration(t, time.Now(), got.UpdatedAt, time.Second)
 }
@@ -71,33 +69,52 @@ func TestChatWrite_UpdateExisting(t *testing.T) {
 
 	repo := NewChatWriteRepository(db)
 
-	chatUUID := uuid.New()
-	createdByUUID := uuid.New()
+	chatUUID := uuid.New().String()
+	createdByUUID := uuid.New().String()
+	participants := createdByUUID + ",user2"
 
-	chat := &models.ChatDB{
-		ChatUUID:      chatUUID.String(),
-		CreatedByUUID: createdByUUID.String(),
-	}
-
-	// Сохраняем первый раз
-	err := repo.Save(ctx, chat)
+	err := repo.Save(ctx, chatUUID, createdByUUID, participants)
 	assert.NoError(t, err)
 
-	// Получаем старое updated_at
 	var oldUpdatedAt time.Time
-	err = db.Get(&oldUpdatedAt, "SELECT updated_at FROM chats WHERE chat_uuid = ?", chatUUID.String())
+	err = db.Get(&oldUpdatedAt, "SELECT updated_at FROM chats WHERE chat_uuid = ?", chatUUID)
 	assert.NoError(t, err)
 
-	// Ждём немного, чтобы updated_at точно изменился
-	time.Sleep(1 * time.Second)
+	time.Sleep(1 * time.Second) // чтобы updated_at изменился
 
-	// Сохраняем повторно (обновление)
-	err = repo.Save(ctx, chat)
+	newParticipants := participants + ",extra-user"
+	err = repo.Save(ctx, chatUUID, createdByUUID, newParticipants)
 	assert.NoError(t, err)
 
-	// Проверяем, что updated_at изменился
-	var newUpdatedAt time.Time
-	err = db.Get(&newUpdatedAt, "SELECT updated_at FROM chats WHERE chat_uuid = ?", chatUUID.String())
+	var got models.ChatDB
+	err = db.Get(&got, `
+		SELECT chat_uuid, participants_uuids, created_by_uuid, created_at, updated_at
+		FROM chats WHERE chat_uuid = ?`, chatUUID)
 	assert.NoError(t, err)
-	assert.True(t, newUpdatedAt.After(oldUpdatedAt), "updated_at должен обновиться")
+	assert.Equal(t, newParticipants, got.ParticipantsUUIDs)
+	assert.True(t, got.UpdatedAt.After(oldUpdatedAt))
+}
+
+func TestChatRead_Get(t *testing.T) {
+	ctx := context.Background()
+	db := setupChatTestDB(t)
+	defer db.Close()
+
+	writeRepo := NewChatWriteRepository(db)
+	readRepo := NewChatReadRepository(db)
+
+	chatUUID := uuid.New().String()
+	createdByUUID := uuid.New().String()
+	participants := createdByUUID + ",user2,user3"
+
+	err := writeRepo.Save(ctx, chatUUID, createdByUUID, participants)
+	assert.NoError(t, err)
+
+	got, err := readRepo.Get(ctx, chatUUID)
+	assert.NoError(t, err)
+	assert.Equal(t, chatUUID, got.ChatUUID)
+	assert.Equal(t, createdByUUID, got.CreatedByUUID)
+	assert.Equal(t, participants, got.ParticipantsUUIDs)
+	assert.WithinDuration(t, time.Now(), got.CreatedAt, time.Second)
+	assert.WithinDuration(t, time.Now(), got.UpdatedAt, time.Second)
 }

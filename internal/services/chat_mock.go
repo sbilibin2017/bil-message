@@ -36,52 +36,53 @@ func (m *MockChatWriter) EXPECT() *MockChatWriterMockRecorder {
 }
 
 // Save mocks base method.
-func (m *MockChatWriter) Save(ctx context.Context, chat *models.ChatDB) error {
+func (m *MockChatWriter) Save(ctx context.Context, chatUUID, createdByUUID, participantsUUIDs string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, chat)
+	ret := m.ctrl.Call(m, "Save", ctx, chatUUID, createdByUUID, participantsUUIDs)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockChatWriterMockRecorder) Save(ctx, chat interface{}) *gomock.Call {
+func (mr *MockChatWriterMockRecorder) Save(ctx, chatUUID, createdByUUID, participantsUUIDs interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockChatWriter)(nil).Save), ctx, chat)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockChatWriter)(nil).Save), ctx, chatUUID, createdByUUID, participantsUUIDs)
 }
 
-// MockChatMemberWriter is a mock of ChatMemberWriter interface.
-type MockChatMemberWriter struct {
+// MockChatReader is a mock of ChatReader interface.
+type MockChatReader struct {
 	ctrl     *gomock.Controller
-	recorder *MockChatMemberWriterMockRecorder
+	recorder *MockChatReaderMockRecorder
 }
 
-// MockChatMemberWriterMockRecorder is the mock recorder for MockChatMemberWriter.
-type MockChatMemberWriterMockRecorder struct {
-	mock *MockChatMemberWriter
+// MockChatReaderMockRecorder is the mock recorder for MockChatReader.
+type MockChatReaderMockRecorder struct {
+	mock *MockChatReader
 }
 
-// NewMockChatMemberWriter creates a new mock instance.
-func NewMockChatMemberWriter(ctrl *gomock.Controller) *MockChatMemberWriter {
-	mock := &MockChatMemberWriter{ctrl: ctrl}
-	mock.recorder = &MockChatMemberWriterMockRecorder{mock}
+// NewMockChatReader creates a new mock instance.
+func NewMockChatReader(ctrl *gomock.Controller) *MockChatReader {
+	mock := &MockChatReader{ctrl: ctrl}
+	mock.recorder = &MockChatReaderMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockChatMemberWriter) EXPECT() *MockChatMemberWriterMockRecorder {
+func (m *MockChatReader) EXPECT() *MockChatReaderMockRecorder {
 	return m.recorder
 }
 
-// Save mocks base method.
-func (m *MockChatMemberWriter) Save(ctx context.Context, chatMember *models.ChatMemberDB) error {
+// Get mocks base method.
+func (m *MockChatReader) Get(ctx context.Context, chatUUID string) (*models.ChatDB, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, chatMember)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Get", ctx, chatUUID)
+	ret0, _ := ret[0].(*models.ChatDB)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
-// Save indicates an expected call of Save.
-func (mr *MockChatMemberWriterMockRecorder) Save(ctx, chatMember interface{}) *gomock.Call {
+// Get indicates an expected call of Get.
+func (mr *MockChatReaderMockRecorder) Get(ctx, chatUUID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockChatMemberWriter)(nil).Save), ctx, chatMember)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockChatReader)(nil).Get), ctx, chatUUID)
 }

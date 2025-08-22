@@ -20,7 +20,9 @@ func NewUserWriteRepository(db *sqlx.DB) *UserWriteRepository {
 // Save сохраняет пользователя в базе данных.
 func (r *UserWriteRepository) Save(
 	ctx context.Context,
-	user *models.UserDB,
+	userUUID string,
+	username string,
+	password_hash string,
 ) error {
 	query := `
 		INSERT INTO users (user_uuid, username, password_hash)
@@ -29,7 +31,7 @@ func (r *UserWriteRepository) Save(
 		SET password_hash = excluded.password_hash,
 		    updated_at = CURRENT_TIMESTAMP
 	`
-	_, err := r.db.ExecContext(ctx, query, user.UserUUID, user.Username, user.PasswordHash)
+	_, err := r.db.ExecContext(ctx, query, userUUID, username, password_hash)
 	return err
 }
 
@@ -42,11 +44,8 @@ func NewUserReadRepository(db *sqlx.DB) *UserReadRepository {
 	return &UserReadRepository{db: db}
 }
 
-// GetByUsername возвращает пользователя по username.
-func (r *UserReadRepository) GetByUsername(
-	ctx context.Context,
-	username string,
-) (*models.UserDB, error) {
+// Get возвращает пользователя по username.
+func (r *UserReadRepository) Get(ctx context.Context, username string) (*models.UserDB, error) {
 	var user models.UserDB
 	query := `SELECT user_uuid, username, password_hash, created_at, updated_at FROM users WHERE username = $1`
 	err := r.db.GetContext(ctx, &user, query, username)
@@ -56,26 +55,5 @@ func (r *UserReadRepository) GetByUsername(
 		}
 		return nil, err
 	}
-	return &user, nil
-}
-
-// GetByUUID возвращает пользователя по userUUID.
-func (r *UserReadRepository) GetByUUID(
-	ctx context.Context,
-	userUUID string,
-) (*models.UserDB, error) {
-	var user models.UserDB
-	query := `SELECT user_uuid, username, password_hash, created_at, updated_at 
-	          FROM users 
-	          WHERE user_uuid = $1`
-
-	err := r.db.GetContext(ctx, &user, query, userUUID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-
 	return &user, nil
 }

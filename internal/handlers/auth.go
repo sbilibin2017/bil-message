@@ -27,7 +27,7 @@ type RegisterRequest struct {
 
 // Registerer определяет интерфейс для регистрации пользователя и получения JWT токена.
 type Registerer interface {
-	Register(ctx context.Context, username string, password string) (userUUID string, err error)
+	Register(ctx context.Context, username, password string) (tokenString string, err error)
 }
 
 // RegisterHandler обрабатывает регистрацию пользователя и возвращает токен в заголовке.
@@ -55,7 +55,7 @@ func RegisterHandler(
 		}
 
 		// Вызываем регистрацию
-		userUUID, err := reg.Register(r.Context(), req.Username, req.Password)
+		token, err := reg.Register(r.Context(), req.Username, req.Password)
 		if err != nil {
 			switch err {
 			case errors.ErrUserAlreadyExists:
@@ -70,9 +70,9 @@ func RegisterHandler(
 		}
 
 		// Устанавливаем Content-Type и возвращаем UUID в plain text
+		w.Header().Set("Authorization", "Bearer "+token)
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(userUUID))
 	}
 }
 
@@ -89,15 +89,11 @@ type LoginRequest struct {
 	// example: Secret123!
 	// default: P@ssw0rd
 	Password string `json:"password"`
-	// UUID устройства пользователя
-	// required: true
-	// example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-	DeviceUUID string `json:"device_uuid"`
 }
 
 // LoginRequest определяет интерфейс для регистрации пользователя и получения JWT токена.
 type Loginer interface {
-	Login(ctx context.Context, username string, password string, deviceUUID string) (token string, err error)
+	Login(ctx context.Context, username, password string) (tokenString string, err error)
 }
 
 // LoginHandler обрабатывает аутентификацию пользователя и возвращает JWT токен в заголовке Authorization.
@@ -125,7 +121,7 @@ func LoginHandler(
 		}
 
 		// Вызываем метод логина
-		token, err := loginer.Login(r.Context(), req.Username, req.Password, req.DeviceUUID)
+		token, err := loginer.Login(r.Context(), req.Username, req.Password)
 		if err != nil {
 			log.Printf("op: %s, err:%s", "user login", err.Error())
 			switch err {

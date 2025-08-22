@@ -10,7 +10,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	models "github.com/sbilibin2017/bil-message/internal/models"
 )
 
 // MockJWTParser is a mock of JWTParser interface.
@@ -37,10 +36,10 @@ func (m *MockJWTParser) EXPECT() *MockJWTParserMockRecorder {
 }
 
 // GetFromRequest mocks base method.
-func (m *MockJWTParser) GetFromRequest(r *http.Request) (*string, error) {
+func (m *MockJWTParser) GetFromRequest(r *http.Request) (string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFromRequest", r)
-	ret0, _ := ret[0].(*string)
+	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -51,19 +50,19 @@ func (mr *MockJWTParserMockRecorder) GetFromRequest(r interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFromRequest", reflect.TypeOf((*MockJWTParser)(nil).GetFromRequest), r)
 }
 
-// Parse mocks base method.
-func (m *MockJWTParser) Parse(tokenString string) (*models.TokenPayload, error) {
+// GetUserUUID mocks base method.
+func (m *MockJWTParser) GetUserUUID(tokenString string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Parse", tokenString)
-	ret0, _ := ret[0].(*models.TokenPayload)
+	ret := m.ctrl.Call(m, "GetUserUUID", tokenString)
+	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Parse indicates an expected call of Parse.
-func (mr *MockJWTParserMockRecorder) Parse(tokenString interface{}) *gomock.Call {
+// GetUserUUID indicates an expected call of GetUserUUID.
+func (mr *MockJWTParserMockRecorder) GetUserUUID(tokenString interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Parse", reflect.TypeOf((*MockJWTParser)(nil).Parse), tokenString)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserUUID", reflect.TypeOf((*MockJWTParser)(nil).GetUserUUID), tokenString)
 }
 
 // MockChatCreator is a mock of ChatCreator interface.
@@ -90,18 +89,18 @@ func (m *MockChatCreator) EXPECT() *MockChatCreatorMockRecorder {
 }
 
 // CreateChat mocks base method.
-func (m *MockChatCreator) CreateChat(ctx context.Context, userUUID string) (*string, error) {
+func (m *MockChatCreator) CreateChat(ctx context.Context, createdByUUID string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateChat", ctx, userUUID)
-	ret0, _ := ret[0].(*string)
+	ret := m.ctrl.Call(m, "CreateChat", ctx, createdByUUID)
+	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateChat indicates an expected call of CreateChat.
-func (mr *MockChatCreatorMockRecorder) CreateChat(ctx, userUUID interface{}) *gomock.Call {
+func (mr *MockChatCreatorMockRecorder) CreateChat(ctx, createdByUUID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChat", reflect.TypeOf((*MockChatCreator)(nil).CreateChat), ctx, userUUID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateChat", reflect.TypeOf((*MockChatCreator)(nil).CreateChat), ctx, createdByUUID)
 }
 
 // MockChatMemberAdder is a mock of ChatMemberAdder interface.
@@ -128,15 +127,53 @@ func (m *MockChatMemberAdder) EXPECT() *MockChatMemberAdderMockRecorder {
 }
 
 // AddMember mocks base method.
-func (m *MockChatMemberAdder) AddMember(ctx context.Context, chatUUID, userUUID string) error {
+func (m *MockChatMemberAdder) AddMember(ctx context.Context, chatUUID, participantUUID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddMember", ctx, chatUUID, userUUID)
+	ret := m.ctrl.Call(m, "AddMember", ctx, chatUUID, participantUUID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddMember indicates an expected call of AddMember.
-func (mr *MockChatMemberAdderMockRecorder) AddMember(ctx, chatUUID, userUUID interface{}) *gomock.Call {
+func (mr *MockChatMemberAdderMockRecorder) AddMember(ctx, chatUUID, participantUUID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMember", reflect.TypeOf((*MockChatMemberAdder)(nil).AddMember), ctx, chatUUID, userUUID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddMember", reflect.TypeOf((*MockChatMemberAdder)(nil).AddMember), ctx, chatUUID, participantUUID)
+}
+
+// MockChatReader is a mock of ChatReader interface.
+type MockChatReader struct {
+	ctrl     *gomock.Controller
+	recorder *MockChatReaderMockRecorder
+}
+
+// MockChatReaderMockRecorder is the mock recorder for MockChatReader.
+type MockChatReaderMockRecorder struct {
+	mock *MockChatReader
+}
+
+// NewMockChatReader creates a new mock instance.
+func NewMockChatReader(ctrl *gomock.Controller) *MockChatReader {
+	mock := &MockChatReader{ctrl: ctrl}
+	mock.recorder = &MockChatReaderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockChatReader) EXPECT() *MockChatReaderMockRecorder {
+	return m.recorder
+}
+
+// IsMember mocks base method.
+func (m *MockChatReader) IsMember(ctx context.Context, chatUUID, userUUID string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsMember", ctx, chatUUID, userUUID)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsMember indicates an expected call of IsMember.
+func (mr *MockChatReaderMockRecorder) IsMember(ctx, chatUUID, userUUID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsMember", reflect.TypeOf((*MockChatReader)(nil).IsMember), ctx, chatUUID, userUUID)
 }

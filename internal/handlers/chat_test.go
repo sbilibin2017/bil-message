@@ -1,217 +1,321 @@
 package handlers
 
 import (
-	"bytes"
-	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/golang/mock/gomock"
 	"github.com/gorilla/websocket"
-	"github.com/sbilibin2017/bil-message/internal/models"
 	"github.com/stretchr/testify/assert"
+	"golang.org/x/net/context"
 )
 
-func TestCreateChatHandler(t *testing.T) {
+// -------------------- NewCreateChatHandler --------------------
+
+func TestNewCreateChatHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockJWT := NewMockJWTParser(ctrl)
-	mockSvc := NewMockChatCreator(ctrl)
-	handler := NewCreateChatHandler(mockJWT, mockSvc)
+	mockCreator := NewMockChatCreator(ctrl)
 
-	validToken := "token-123"
-	userUUID := "user-uuid-1"
-	chatUUID := "chat-uuid-1"
+	handler := NewCreateChatHandler(mockJWT, mockCreator)
 
-	tests := []struct {
-		name           string
-		mockSetup      func()
-		expectedStatus int
-		expectedBody   string
-	}{
-		{
-			name: "success",
-			mockSetup: func() {
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(&validToken, nil)
-				mockJWT.EXPECT().Parse(validToken).Return(&models.TokenPayload{UserUUID: userUUID}, nil)
-				mockSvc.EXPECT().CreateChat(gomock.Any(), userUUID).Return(&chatUUID, nil)
-			},
-			expectedStatus: http.StatusCreated,
-			expectedBody:   chatUUID,
-		},
-		{
-			name: "unauthorized - no token",
-			mockSetup: func() {
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(nil, errors.New("no token"))
-			},
-			expectedStatus: http.StatusUnauthorized,
-		},
-		{
-			name: "forbidden - invalid token",
-			mockSetup: func() {
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(&validToken, nil)
-				mockJWT.EXPECT().Parse(validToken).Return(nil, errors.New("invalid token"))
-			},
-			expectedStatus: http.StatusForbidden,
-		},
-		{
-			name: "internal error - CreateChat failed",
-			mockSetup: func() {
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(&validToken, nil)
-				mockJWT.EXPECT().Parse(validToken).Return(&models.TokenPayload{UserUUID: userUUID}, nil)
-				mockSvc.EXPECT().CreateChat(gomock.Any(), userUUID).Return(nil, errors.New("db error"))
-			},
-			expectedStatus: http.StatusInternalServerError,
-		},
-	}
+	t.Run("success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats", nil)
+		w := httptest.NewRecorder()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.mockSetup != nil {
-				tt.mockSetup()
-			}
+		mockJWT.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockJWT.EXPECT().GetUserUUID("token").Return("user-uuid", nil)
+		mockCreator.EXPECT().CreateChat(req.Context(), "user-uuid").Return("chat-uuid", nil)
 
-			req := httptest.NewRequest(http.MethodPost, "/chats/create", nil)
-			w := httptest.NewRecorder()
+		handler(w, req)
 
-			handler(w, req)
-			resp := w.Result()
+		resp := w.Result()
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+		assert.Equal(t, "text/plain", resp.Header.Get("Content-Type"))
+	})
 
-			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
-			if tt.expectedBody != "" {
-				buf := new(bytes.Buffer)
-				buf.ReadFrom(resp.Body)
-				assert.Equal(t, tt.expectedBody, buf.String())
-			}
-		})
-	}
+	t.Run("unauthorized when token missing", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats", nil)
+		w := httptest.NewRecorder()
+
+		mockJWT.EXPECT().GetFromRequest(req).Return("", assert.AnError)
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("forbidden when token invalid", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats", nil)
+		w := httptest.NewRecorder()
+
+		mockJWT.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockJWT.EXPECT().GetUserUUID("token").Return("", assert.AnError)
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("internal error when CreateChat fails", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats", nil)
+		w := httptest.NewRecorder()
+
+		mockJWT.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockJWT.EXPECT().GetUserUUID("token").Return("user-uuid", nil)
+		mockCreator.EXPECT().CreateChat(req.Context(), "user-uuid").Return("", assert.AnError)
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
-func TestAddMemberHandler(t *testing.T) {
-	validToken := "token-123"
-	chatUUID := "chat-uuid-1"
-	userUUID := "user-uuid-2"
+// -------------------- NewAddMemberHandler --------------------
+
+func TestNewAddMemberHandler(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockJWT := NewMockJWTParser(ctrl)
+	mockAdder := NewMockChatMemberAdder(ctrl)
+
+	handler := NewAddMemberHandler(mockJWT, mockAdder)
+
+	t.Run("success", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats/123/members", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("chat-uuid", "chat-uuid")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		w := httptest.NewRecorder()
+
+		mockJWT.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockJWT.EXPECT().GetUserUUID("token").Return("user-uuid", nil)
+		mockAdder.EXPECT().AddMember(req.Context(), "chat-uuid", "user-uuid").Return(nil)
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("bad request when chatUUID missing", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats//members", nil)
+		w := httptest.NewRecorder()
+
+		mockJWT.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockJWT.EXPECT().GetUserUUID("token").Return("user-uuid", nil)
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("unauthorized", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats/123/members", nil)
+		w := httptest.NewRecorder()
+
+		mockJWT.EXPECT().GetFromRequest(req).Return("", assert.AnError)
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("forbidden", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats/123/members", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("chat-uuid", "chat-uuid")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		w := httptest.NewRecorder()
+
+		mockJWT.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockJWT.EXPECT().GetUserUUID("token").Return("", assert.AnError)
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("internal error AddMember", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/chats/123/members", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("chat-uuid", "chat-uuid")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+		w := httptest.NewRecorder()
+
+		mockJWT.EXPECT().GetFromRequest(req).Return("token", nil)
+		mockJWT.EXPECT().GetUserUUID("token").Return("user-uuid", nil)
+		mockAdder.EXPECT().AddMember(req.Context(), "chat-uuid", "user-uuid").Return(assert.AnError)
+
+		handler(w, req)
+
+		assert.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestChatWSHandler_Success_MessageBroadcast(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	jwt := NewMockJWTParser(ctrl)
+	reader := NewMockChatReader(ctrl)
+
+	// expectations
+	jwt.EXPECT().GetFromRequest(gomock.Any()).Return("valid-token", nil)
+	jwt.EXPECT().GetUserUUID("valid-token").Return("user1", nil)
+	reader.EXPECT().IsMember(gomock.Any(), "chat123", "user1").Return(true, nil)
+
+	r := chi.NewRouter()
+	r.Get("/ws/{chat-uuid}", NewChatWSHandler(jwt, reader))
+
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	u := "ws" + srv.URL[len("http"):] + "/ws/chat123"
+	ws, resp, err := websocket.DefaultDialer.Dial(u, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
+	defer ws.Close()
+
+	// send message (no other clients connected)
+	err = ws.WriteJSON(map[string]string{"message": "hello"})
+	assert.NoError(t, err)
+}
+
+func TestChatWSHandler_Unauthorized(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	jwt := NewMockJWTParser(ctrl)
+	reader := NewMockChatReader(ctrl)
+
+	// expectation: fail on GetFromRequest
+	jwt.EXPECT().GetFromRequest(gomock.Any()).Return("", assert.AnError)
+
+	r := chi.NewRouter()
+	r.Get("/ws/{chat-uuid}", NewChatWSHandler(jwt, reader))
+
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	u := "ws" + srv.URL[len("http"):] + "/ws/chat123"
+	_, resp, err := websocket.DefaultDialer.Dial(u, nil)
+	assert.Error(t, err)
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestChatWSHandler_ForbiddenIfNotMember(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	jwt := NewMockJWTParser(ctrl)
+	reader := NewMockChatReader(ctrl)
+
+	// expectations
+	jwt.EXPECT().GetFromRequest(gomock.Any()).Return("valid-token", nil)
+	jwt.EXPECT().GetUserUUID("valid-token").Return("user1", nil)
+	reader.EXPECT().IsMember(gomock.Any(), "chat123", "user1").Return(false, nil)
+
+	r := chi.NewRouter()
+	r.Get("/ws/{chat-uuid}", NewChatWSHandler(jwt, reader))
+
+	srv := httptest.NewServer(r)
+	defer srv.Close()
+
+	u := "ws" + srv.URL[len("http"):] + "/ws/chat123"
+	_, resp, err := websocket.DefaultDialer.Dial(u, nil)
+	assert.Error(t, err)
+	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+}
+
+func newTestServerWithParam(t *testing.T, jwt *MockJWTParser, reader *MockChatReader, chatUUID string) *httptest.Server {
+	r := chi.NewRouter()
+	r.Get("/ws/{chat-uuid}", func(w http.ResponseWriter, r *http.Request) {
+		// Подменяем chat-uuid
+		rc := chi.NewRouteContext()
+		rc.URLParams.Add("chat-uuid", chatUUID)
+		r = r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rc))
+		NewChatWSHandler(jwt, reader)(w, r)
+	})
+	return httptest.NewServer(r)
+}
+
+func TestChatWSHandler_ErrorCases(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
 	tests := []struct {
 		name           string
-		url            string
-		mockSetup      func(mockJWT *MockJWTParser, mockSvc *MockChatMemberAdder)
+		setupMocks     func(jwt *MockJWTParser, reader *MockChatReader)
+		chatUUID       string
 		expectedStatus int
 	}{
 		{
-			name: "/ success",
-			url:  "/chats/" + chatUUID + "/members/" + userUUID,
-			mockSetup: func(mockJWT *MockJWTParser, mockSvc *MockChatMemberAdder) {
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(&validToken, nil)
-				mockJWT.EXPECT().Parse(validToken).Return(&models.TokenPayload{UserUUID: "creator-uuid"}, nil)
-				mockSvc.EXPECT().AddMember(gomock.Any(), chatUUID, userUUID).Return(nil)
+			name: "Unauthorized when GetFromRequest fails",
+			setupMocks: func(jwt *MockJWTParser, reader *MockChatReader) {
+				jwt.EXPECT().GetFromRequest(gomock.Any()).Return("", errors.New("bad token"))
 			},
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name: "/ unauthorized - no token",
-			url:  "/chats/" + chatUUID + "/members/" + userUUID,
-			mockSetup: func(mockJWT *MockJWTParser, mockSvc *MockChatMemberAdder) {
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(nil, errors.New("no token"))
-			},
+			chatUUID:       "chat123",
 			expectedStatus: http.StatusUnauthorized,
 		},
 		{
-			name: "/ forbidden - invalid token",
-			url:  "/chats/" + chatUUID + "/members/" + userUUID,
-			mockSetup: func(mockJWT *MockJWTParser, mockSvc *MockChatMemberAdder) {
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(&validToken, nil)
-				mockJWT.EXPECT().Parse(validToken).Return(nil, errors.New("invalid token"))
+			name: "Forbidden when GetUserUUID fails",
+			setupMocks: func(jwt *MockJWTParser, reader *MockChatReader) {
+				jwt.EXPECT().GetFromRequest(gomock.Any()).Return("valid", nil)
+				jwt.EXPECT().GetUserUUID("valid").Return("", errors.New("parse error"))
 			},
+			chatUUID:       "chat123",
 			expectedStatus: http.StatusForbidden,
 		},
 		{
-			name: "/ bad request - missing params",
-			url:  "/chats//members/",
-			mockSetup: func(mockJWT *MockJWTParser, mockSvc *MockChatMemberAdder) {
-				// Настраиваем возвращение токена, чтобы код дошёл до проверки URL-параметров
-				token := "token-123"
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(&token, nil)
-				mockJWT.EXPECT().Parse(token).Return(&models.TokenPayload{UserUUID: "creator-uuid"}, nil)
+			name: "BadRequest when chatUUID missing",
+			setupMocks: func(jwt *MockJWTParser, reader *MockChatReader) {
+				jwt.EXPECT().GetFromRequest(gomock.Any()).Return("valid", nil)
+				jwt.EXPECT().GetUserUUID("valid").Return("user1", nil)
 			},
+			chatUUID:       "", // пустой UUID → BadRequest
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name: "/ internal error - AddMember failed",
-			url:  "/chats/" + chatUUID + "/members/" + userUUID,
-			mockSetup: func(mockJWT *MockJWTParser, mockSvc *MockChatMemberAdder) {
-				mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(&validToken, nil)
-				mockJWT.EXPECT().Parse(validToken).Return(&models.TokenPayload{UserUUID: "creator-uuid"}, nil)
-				mockSvc.EXPECT().AddMember(gomock.Any(), chatUUID, userUUID).Return(errors.New("db error"))
+			name: "InternalServerError when IsMember returns error",
+			setupMocks: func(jwt *MockJWTParser, reader *MockChatReader) {
+				jwt.EXPECT().GetFromRequest(gomock.Any()).Return("valid", nil)
+				jwt.EXPECT().GetUserUUID("valid").Return("user1", nil)
+				reader.EXPECT().IsMember(gomock.Any(), "chat123", "user1").Return(false, errors.New("db error"))
 			},
+			chatUUID:       "chat123",
 			expectedStatus: http.StatusInternalServerError,
+		},
+		{
+			name: "Forbidden when user is not a member",
+			setupMocks: func(jwt *MockJWTParser, reader *MockChatReader) {
+				jwt.EXPECT().GetFromRequest(gomock.Any()).Return("valid", nil)
+				jwt.EXPECT().GetUserUUID("valid").Return("user1", nil)
+				reader.EXPECT().IsMember(gomock.Any(), "chat123", "user1").Return(false, nil)
+			},
+			chatUUID:       "chat123",
+			expectedStatus: http.StatusForbidden,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+			jwt := NewMockJWTParser(ctrl)
+			reader := NewMockChatReader(ctrl)
 
-			mockJWT := NewMockJWTParser(ctrl)
-			mockSvc := NewMockChatMemberAdder(ctrl)
-			handler := NewAddMemberHandler(mockJWT, mockSvc)
+			tt.setupMocks(jwt, reader)
 
-			if tt.mockSetup != nil {
-				tt.mockSetup(mockJWT, mockSvc)
-			}
+			srv := newTestServerWithParam(t, jwt, reader, tt.chatUUID)
+			defer srv.Close()
 
-			req := httptest.NewRequest(http.MethodPost, tt.url, nil)
-
-			// Если нужны URL-параметры
-			if tt.url != "/chats//members/" {
-				rctx := chi.NewRouteContext()
-				rctx.URLParams.Add("chat-uuid", chatUUID)
-				rctx.URLParams.Add("user-uuid", userUUID)
-				req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-			}
-
-			w := httptest.NewRecorder()
-			handler(w, req)
-			resp := w.Result()
-
+			resp, err := http.Get(srv.URL + "/ws/dummy")
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expectedStatus, resp.StatusCode)
 		})
-	}
-}
-
-func TestChatWSHandler_Success(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockJWT := NewMockJWTParser(ctrl)
-	userUUID := "user-1"
-	chatUUID := "chat-1"
-	validToken := "token-123"
-
-	handler := NewChatWSHandler(mockJWT)
-
-	// Chi router for path params
-	r := chi.NewRouter()
-	r.Get("/chats/{chat-uuid}/ws", handler)
-
-	server := httptest.NewServer(r)
-	defer server.Close()
-
-	wsURL := "ws" + server.URL[4:] + "/chats/" + chatUUID + "/ws"
-
-	// Set up mocks
-	mockJWT.EXPECT().GetFromRequest(gomock.Any()).Return(&validToken, nil)
-	mockJWT.EXPECT().Parse(validToken).Return(&models.TokenPayload{UserUUID: userUUID}, nil)
-
-	// Connect
-	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
-	if assert.NoError(t, err) {
-		defer conn.Close()
-		assert.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
 	}
 }

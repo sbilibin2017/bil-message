@@ -73,16 +73,16 @@ func (m *MockLoginer) EXPECT() *MockLoginerMockRecorder {
 }
 
 // Login mocks base method.
-func (m *MockLoginer) Login(ctx context.Context, username, password, deviceUUID string) (string, error) {
+func (m *MockLoginer) Login(ctx context.Context, username, password string) (string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Login", ctx, username, password, deviceUUID)
+	ret := m.ctrl.Call(m, "Login", ctx, username, password)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Login indicates an expected call of Login.
-func (mr *MockLoginerMockRecorder) Login(ctx, username, password, deviceUUID interface{}) *gomock.Call {
+func (mr *MockLoginerMockRecorder) Login(ctx, username, password interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Login", reflect.TypeOf((*MockLoginer)(nil).Login), ctx, username, password, deviceUUID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Login", reflect.TypeOf((*MockLoginer)(nil).Login), ctx, username, password)
 }

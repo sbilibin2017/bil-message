@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sbilibin2017/bil-message/internal/models"
@@ -9,65 +11,96 @@ import (
 
 // ChatWriter отвечает за работу с таблицей chats
 type ChatWriter interface {
-	Save(ctx context.Context, chat *models.ChatDB) error
+	Save(
+		ctx context.Context,
+		chatUUID string,
+		createdByUUID string,
+		participantsUUIDs string,
+	) error
 }
 
-// ChatMemberWriter отвечает за работу с таблицей chat_members
-type ChatMemberWriter interface {
-	Save(ctx context.Context, chatMember *models.ChatMemberDB) error
+type ChatReader interface {
+	Get(
+		ctx context.Context,
+		chatUUID string,
+	) (*models.ChatDB, error)
 }
 
 // ChatService управляет бизнес-логикой чатов
 type ChatService struct {
-	chats   ChatWriter
-	members ChatMemberWriter
+	cw ChatWriter
+	cr ChatReader
 }
 
 // NewChatService создаёт ChatService
-func NewChatService(chats ChatWriter, members ChatMemberWriter) *ChatService {
+func NewChatService(
+	cw ChatWriter,
+	cr ChatReader,
+) *ChatService {
 	return &ChatService{
-		chats:   chats,
-		members: members,
+		cw: cw,
+		cr: cr,
 	}
 }
 
 // CreateChat создаёт новый чат и добавляет создателя в качестве участника
-func (s *ChatService) CreateChat(ctx context.Context, userUUID string) (*string, error) {
-	chatUUID := uuid.New().String()
-
-	// Создаём объект ChatDB
-	chat := &models.ChatDB{
-		ChatUUID:      chatUUID,
-		CreatedByUUID: userUUID,
+func (s *ChatService) CreateChat(
+	ctx context.Context,
+	createdByUUID string,
+) (chatUUID string, err error) {
+	chatUUID = uuid.New().String()
+	if err := s.cw.Save(ctx, chatUUID, createdByUUID, createdByUUID); err != nil {
+		return "", err
 	}
-
-	// Сохраняем чат
-	if err := s.chats.Save(ctx, chat); err != nil {
-		return nil, err
-	}
-
-	// Создаём объект ChatMemberDB для создателя
-	member := &models.ChatMemberDB{
-		ChatMemberUUID: uuid.New().String(),
-		ChatUUID:       chatUUID,
-		UserUUID:       userUUID,
-	}
-
-	// Добавляем участника
-	if err := s.members.Save(ctx, member); err != nil {
-		return nil, err
-	}
-
-	return &chatUUID, nil
+	return chatUUID, nil
 }
 
 // AddMember добавляет нового участника в чат
-func (s *ChatService) AddMember(ctx context.Context, chatUUID string, userUUID string) error {
-	// Создаём объект ChatMemberDB для создателя
-	member := &models.ChatMemberDB{
-		ChatMemberUUID: uuid.New().String(),
-		ChatUUID:       chatUUID,
-		UserUUID:       userUUID,
+func (s *ChatService) AddMember(
+	ctx context.Context,
+	chatUUID string,
+	participantUUID string,
+) error {
+	chat, err := s.cr.Get(ctx, chatUUID)
+	if err != nil {
+		return err
 	}
-	return s.members.Save(ctx, member)
+	if chat == nil {
+		return errors.New("chat not found")
+	}
+
+	participantsSlice := strings.Split(chat.ParticipantsUUIDs, ",")
+	for _, p := range participantsSlice {
+		if p == participantUUID {
+			return nil
+		}
+	}
+
+	participantsSlice = append(participantsSlice, participantUUID)
+	updatedParticipants := strings.Join(participantsSlice, ",")
+
+	return s.cw.Save(ctx, chatUUID, chat.CreatedByUUID, updatedParticipants)
+}
+
+// IsMember проверяет, является ли пользователь участником чата
+func (s *ChatService) IsMember(
+	ctx context.Context,
+	chatUUID string,
+	userUUID string,
+) (bool, error) {
+	chat, err := s.cr.Get(ctx, chatUUID)
+	if err != nil {
+		return false, err
+	}
+	if chat == nil {
+		return false, errors.New("chat not found")
+	}
+
+	participantsSlice := strings.Split(chat.ParticipantsUUIDs, ",")
+	for _, p := range participantsSlice {
+		if p == userUUID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
