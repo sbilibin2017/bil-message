@@ -1,0 +1,13 @@
+@startuml
+title Выход пользователя из аккаунта (Logout)
+
+actor Client
+participant Server
+
+Client -> Server: POST /logout {JWT}
+
+Server -> Server: Проверка JWT
+Server -> Server: Инвалидирование токена
+Server --> Client: Подтверждение выхода
+
+@enduml

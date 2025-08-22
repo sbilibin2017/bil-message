@@ -1,0 +1,20 @@
+@startuml
+title Удаление пользователя из комнаты (только создатель)
+
+actor Client
+participant Server
+
+Client -> Client: Ввод room_uuid и username участника для удаления
+
+Client -> Server: POST /rooms/{room_uuid}/remove {username, JWT}
+
+Server -> Server: Проверка JWT
+Server -> Server: Проверка, что пользователь является создателем комнаты
+Server -> Server: Проверка существования комнаты
+Server -> Server: Проверка, что пользователь является участником комнаты
+Server -> Server: Удаление пользователя из room_member
+Server -> Server: Обновление ключа комнаты для E2EE (если необходимо)
+
+Server --> Client: Подтверждение удаления пользователя
+
+@enduml

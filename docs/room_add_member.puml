@@ -1,0 +1,20 @@
+@startuml
+title Добавление пользователя в комнату (только создатель)
+
+actor Client
+participant Server
+
+Client -> Client: Ввод room_uuid и username участника
+
+Client -> Server: POST /rooms/{room_uuid}/add {username, JWT}
+
+Server -> Server: Проверка JWT
+Server -> Server: Проверка, что пользователь является создателем комнаты
+Server -> Server: Проверка существования комнаты
+Server -> Server: Проверка существования пользователя
+Server -> Server: Добавление пользователя в room_member
+Server -> Server: Генерация ключа комнаты для нового устройства (E2EE)
+
+Server --> Client: Подтверждение добавления пользователя
+
+@enduml

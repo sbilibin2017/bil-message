@@ -1,15 +1,15 @@
 @startuml
-actor User
-participant "Auth Service" as Auth
-database "DB" as DB
+title Регистрация пользователя (без учёта устройства)
 
-User -> Auth : Отправляет JSON {username, password}
-Auth -> DB : Проверяет существование username
-DB --> Auth : nil или существующий пользователь
+actor Client
+participant Server
 
-Auth -> Auth : Генерирует userUUID
-Auth -> Auth : Хэширует пароль
-Auth -> DB : Сохраняет нового пользователя
-DB --> Auth : Подтверждение сохранения
-Auth --> User : userUUID
+Client -> Client: Ввод username и password
+Client -> Server: POST /register {username, password}
+
+Server -> Server: Проверка уникальности username
+Server -> Server: Хеширование пароля
+Server -> Server: Создание записи в таблице user
+Server --> Client: user_uuid / подтверждение регистрации
+
 @enduml
