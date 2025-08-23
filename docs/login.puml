@@ -1,16 +1,18 @@
 @startuml
-actor User
-participant "Auth Service" as Auth
-database "DB" as DB
+title Аутентификация пользователя с устройства
 
-User -> Auth : Отправляет JSON {username, password, deviceUUID}
-Auth -> DB : Находит пользователя по username
-DB --> Auth : Пользователь найден / nil
+actor Client
+participant Server
 
-Auth -> Auth : Проверяет пароль
-Auth -> DB : Проверяет deviceUUID
-DB --> Auth : Устройство найдено / не найдено
+Client -> Client: Ввод username и password
+Client -> Client: Чтение сохранённых device_uuid из конфига
 
-Auth -> Auth : Генерирует JWT токен
-Auth --> User : JWT токен в заголовке Authorization
+Client -> Server: POST /login {username, password, device_uuid}
+
+Server -> Server: Поиск пользователя по username
+Server -> Server: Проверка пароля
+Server -> Server: Проверка, что device_uuid принадлежит user_uuid
+Server -> Server: Генерация JWT {user_uuid, device_uuid, exp}
+
+Server --> Client: JWT
 @enduml
