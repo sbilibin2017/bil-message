@@ -2,7 +2,9 @@ package e2e
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net"
@@ -31,36 +33,38 @@ type RegisterSuite struct {
 	address    string
 }
 
-// getFreePort находит свободный TCP порт на локальной машине
-func getFreePort() (string, error) {
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		return "", err
-	}
-	defer l.Close()
-	return fmt.Sprintf(":%d", l.Addr().(*net.TCPAddr).Port), nil
-}
-
 func (s *RegisterSuite) SetupSuite() {
 	ctx := context.Background()
 
-	log.Println("[SetupSuite] Компиляция серверного бинарника...")
-	s.serverPath = filepath.Join(os.TempDir(), "bil-server-test")
-	s.clientPath = filepath.Join(os.TempDir(), "bil-client-test")
+	log.Println("[SetupSuite] Компиляция бинарников...")
 
-	// Путь от tests/e2e к корню проекта
+	// Генерация случайного хэша для бинарников
+	binHash := func() string {
+		b := make([]byte, 4) // 8 hex символов
+		if _, err := rand.Read(b); err != nil {
+			panic(err)
+		}
+		return hex.EncodeToString(b)
+	}
+
+	s.serverPath = filepath.Join(os.TempDir(), fmt.Sprintf("bil-server-%s", binHash()))
+	s.clientPath = filepath.Join(os.TempDir(), fmt.Sprintf("bil-client-%s", binHash()))
+
+	// Компиляция серверного бинарника
 	serverBuild := exec.Command("go", "build", "-o", s.serverPath, "../../cmd/server")
 	serverBuild.Stdout = os.Stdout
 	serverBuild.Stderr = os.Stderr
 	s.Require().NoError(serverBuild.Run())
 	log.Println("[SetupSuite] Серверный бинарник скомпилирован:", s.serverPath)
 
+	// Компиляция клиентского бинарника
 	clientBuild := exec.Command("go", "build", "-o", s.clientPath, "../../cmd/client")
 	clientBuild.Stdout = os.Stdout
 	clientBuild.Stderr = os.Stderr
 	s.Require().NoError(clientBuild.Run())
 	log.Println("[SetupSuite] Клиентский бинарник скомпилирован:", s.clientPath)
 
+	// Запуск PostgreSQL контейнера
 	log.Println("[SetupSuite] Запуск контейнера PostgreSQL...")
 	req := testcontainers.ContainerRequest{
 		Image:        "postgres:15",
@@ -101,9 +105,11 @@ func (s *RegisterSuite) SetupSuite() {
 	s.Require().NoError(goose.Up(dbConn, migrationsDir), "failed to run migrations")
 	log.Println("[SetupSuite] Миграции выполнены")
 
-	// Свободный порт для сервера
-	s.address, err = getFreePort()
+	// Поиск свободного порта для сервера
+	l, err := net.Listen("tcp", "localhost:0")
 	s.Require().NoError(err)
+	s.address = fmt.Sprintf(":%d", l.Addr().(*net.TCPAddr).Port)
+	l.Close()
 	log.Println("[SetupSuite] Сервер будет запущен на порту:", s.address)
 
 	// Запуск сервера
@@ -138,7 +144,6 @@ func (s *RegisterSuite) TestRegisterUser() {
 	password := "password123"
 
 	log.Println("[TestRegisterUser] Запуск клиентского бинарника для регистрации...")
-	// Добавляем /api/v1 к адресу сервера
 	cmd := exec.Command(s.clientPath,
 		"register",
 		"--address", "http://localhost"+s.address+"/api/v1",
@@ -149,7 +154,7 @@ func (s *RegisterSuite) TestRegisterUser() {
 	s.Require().NoError(err, "client command failed: %s", string(out))
 	log.Println("[TestRegisterUser] Клиентский бинарник завершён. Output:", string(out))
 
-	// Проверяем, что пользователь зарегистрирован в базе
+	// Проверка пользователя в базе
 	log.Println("[TestRegisterUser] Проверка пользователя в базе...")
 	dbConn, err := sql.Open("pgx", s.postgresURL)
 	s.Require().NoError(err)
