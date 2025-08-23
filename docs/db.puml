@@ -2,63 +2,73 @@
 skinparam linetype ortho
 skinparam packageStyle rectangle
 
-' --- таблицы ---
-class User {
-  +user_uuid : UUID <<PK>>
+entity "users" as users {
+  * user_uuid : UUID
+  --
   username : varchar
   password_hash : text
   created_at : timestamp
+  updated_at : timestamp
 }
 
-class UserDevice {
-  +user_device_uuid : UUID <<PK>>
-  user_uuid : UUID <<FK to User.user_uuid>>
-  device_name : varchar
-  public_key : bytea
+entity "user_devices" as user_devices {
+  * device_uuid : UUID
+  --
+  user_uuid : UUID
+  public_key : text
   created_at : timestamp
+  updated_at : timestamp
 }
 
-class Room {
-  +room_uuid : UUID <<PK>>
+entity "rooms" as rooms {
+  * room_uuid : UUID
+  --
   name : varchar
-  created_by : UUID <<FK to User.user_uuid>>
+  creator_uuid : UUID
   created_at : timestamp
+  updated_at : timestamp
 }
 
-class RoomMember {
-  +room_uuid : UUID <<FK to Room.room_uuid>>
-  +user_uuid : UUID <<FK to User.user_uuid>>
+entity "room_members" as room_members {
+  * room_uuid : UUID
+  * user_uuid : UUID
+  --
   role : varchar
   joined_at : timestamp
-}
-
-class RoomKey {
-  +room_uuid : UUID <<FK to Room.room_uuid>>
-  +user_device_uuid : UUID <<FK to UserDevice.user_device_uuid>>
-  ephemeral_pub : bytea
-  nonce : bytea
-  wrapped_key : bytea
   created_at : timestamp
+  updated_at : timestamp
 }
 
-class Message {
-  +message_uuid : UUID <<PK>>
-  room_uuid : UUID <<FK to Room.room_uuid>>
-  user_uuid : UUID <<FK to User.user_uuid>>
+entity "room_keys" as room_keys {
+  * room_uuid : UUID
+  * device_uuid : UUID
+  --
+  encrypted_key : text
+  created_at : timestamp
+  updated_at : timestamp
+}
+
+entity "room_messages" as room_messages {
+  * message_uuid : UUID
+  --
+  room_uuid : UUID
+  sender_uuid : UUID
   ciphertext : text
-  nonce : bytea
+  sent_at : timestamp
   created_at : timestamp
+  updated_at : timestamp
 }
 
-' --- связи ---
-User -right-> UserDevice : "has"
-User -down-> RoomMember : "joins"
-User -down-> Message : "sends"
-User -right-> Room : "creates"
+' --- отношения ---
+users ||--o{ user_devices : "owns"
+users ||--o{ room_members : "joins"
+users ||--o{ room_messages : "sends"
+users ||--o{ rooms : "creates"
 
-Room -down-> RoomMember : "has"
-Room -down-> RoomKey : "encrypts"
-Room -down-> Message : "contains"
+rooms ||--o{ room_members : "has"
+rooms ||--o{ room_keys : "encrypts"
+rooms ||--o{ room_messages : "contains"
 
-UserDevice -right-> RoomKey : "stores"
+user_devices ||--o{ room_keys : "stores"
+
 @enduml
