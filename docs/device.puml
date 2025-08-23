@@ -1,0 +1,18 @@
+@startuml
+title Добавление нового устройства
+
+actor Client
+participant Server
+
+Client -> Client: Ввод username и password
+Client -> Client: Генерация пары ключей устройства (private/public)
+
+Client -> Server: POST /device/add {username, password, public_key}
+
+Server -> Server: Проверка пользователя (username/password)
+Server -> Server: Добавление устройства к пользовател (user_uuid + public_key)
+Server -> Server: Генерация JWT {user_uuid, device_uuid, exp}
+
+Server --> Client: JWT + device_uuid
+Client -> Client: Сохранение device_uuid и private_key в конфиг файл
+@enduml

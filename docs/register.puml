@@ -1,5 +1,5 @@
 @startuml
-title Регистрация пользователя (без учёта устройства)
+title Регистрация пользователя (без устройства)
 
 actor Client
 participant Server
@@ -9,7 +9,7 @@ Client -> Server: POST /register {username, password}
 
 Server -> Server: Проверка уникальности username
 Server -> Server: Хеширование пароля
-Server -> Server: Создание записи в таблице user
-Server --> Client: user_uuid / подтверждение регистрации
+Server -> Server: Создание записи в User
 
+Server --> Client: user_uuid / подтверждение регистрации
 @enduml
