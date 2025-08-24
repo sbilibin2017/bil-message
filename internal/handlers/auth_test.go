@@ -192,7 +192,8 @@ func TestAddDeviceHandler(t *testing.T) {
 				bodyBytes, _ = json.Marshal(v)
 			}
 
-			req := httptest.NewRequest(http.MethodPost, "/device", bytes.NewReader(bodyBytes))
+			// Исправляем путь: добавляем ведущий слэш
+			req := httptest.NewRequest(http.MethodPost, "/auth/device", bytes.NewReader(bodyBytes))
 			w := httptest.NewRecorder()
 
 			AddDeviceHandler(mockSvc).ServeHTTP(w, req)

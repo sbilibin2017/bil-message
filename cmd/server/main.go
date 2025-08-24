@@ -1,3 +1,9 @@
+// main.go
+// @title       bil-message API
+// @version     1.0
+// @description API для защищённого обмена сообщениями между пользователями
+// @host        localhost:8080
+// @BasePath    /api/v1
 package main
 
 import (
@@ -11,15 +17,14 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/sbilibin2017/bil-message/internal/db"
 	"github.com/sbilibin2017/bil-message/internal/handlers"
 	"github.com/sbilibin2017/bil-message/internal/jwt"
 	"github.com/sbilibin2017/bil-message/internal/repositories"
-	"github.com/sbilibin2017/bil-message/internal/repositories/db"
 	"github.com/sbilibin2017/bil-message/internal/services"
 	"github.com/spf13/pflag"
 )
 
-// main — точка входа в сервер
 func main() {
 	printBuildInfo()
 	parseFlags()

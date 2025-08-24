@@ -9,18 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sbilibin2017/bil-message/internal/client"
-	"github.com/sbilibin2017/bil-message/internal/client/http"
-	"github.com/spf13/pflag"
+	"github.com/sbilibin2017/bil-message/internal/transport/http"
+	"github.com/spf13/cobra"
 )
-
-// main — точка входа в CLI клиент
-func main() {
-	printBuildInfo()
-	parseFlags()
-	if err := run(context.Background()); err != nil {
-		log.Fatal(err)
-	}
-}
 
 // Флаги сборки (ldflags)
 var (
@@ -29,102 +20,172 @@ var (
 	buildVersion string = "N/A" // Версия сборки
 )
 
-// printBuildInfo выводит информацию о версии, коммите и дате сборки
-func printBuildInfo() {
-	log.Printf("Client build info:\n")
-	log.Printf("  Version: %s\n", buildVersion)
-	log.Printf("  Commit:  %s\n", buildCommit)
-	log.Printf("  Date:    %s\n", buildDate)
-}
-
-// Флаги командной строки
-var (
-	address   string
-	username  string
-	password  string
-	publicKey string
-)
-
-// parseFlags парсит флаги командной строки
-func parseFlags() {
-	pflag.StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
-	pflag.StringVarP(&username, "username", "u", "user", "Имя пользователя для регистрации")
-	pflag.StringVarP(&password, "password", "p", "password", "Пароль пользователя для регистрации")
-	pflag.StringVarP(&publicKey, "public-key", "k", "key", "Публичный ключ пользователя для устройства")
-	pflag.Parse()
-}
-
-// run выполняет команду CLI
-// Поддерживает команды:
-//   - register: регистрация нового пользователя на сервере
-func run(ctx context.Context) error {
-	if len(os.Args) < 2 {
-		return fmt.Errorf("command is not provided")
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
 	}
+}
 
-	command := os.Args[1]
+// run создаёт root команду и добавляет подкоманды, затем выполняет её
+func run() error {
+	cmd := newRootCommand()
+	cmd.AddCommand(
+		newRegisterCommand(),
+		newDeviceCommand(),
+		newLoginCommand(),
+		newVersionCommand(),
+	)
+	return cmd.Execute()
+}
 
-	httpClient, err := http.New(address, http.WithRetryPolicy(
-		http.RetryPolicy{
-			Count:   3,
-			Wait:    1 * time.Second,
-			MaxWait: 3 * time.Second,
+// newRootCommand создаёт корневую команду CLI
+func newRootCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "bil-message-client",
+		Short: "CLI клиент для bil-message",
+		Long:  "CLI клиент для взаимодействия с сервером bil-message: регистрация, управление устройствами и вход в аккаунт.",
+	}
+}
+
+// newRegisterCommand создаёт команду 'register' для регистрации нового пользователя
+func newRegisterCommand() *cobra.Command {
+	var address, username, password string
+
+	cmd := &cobra.Command{
+		Use:     "register",
+		Short:   "Регистрация нового пользователя",
+		Example: "bil-message-client register --username testuser --password secret --address http://localhost:8080",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			httpClient, err := http.New(address, http.WithRetryPolicy(http.RetryPolicy{
+				Count:   3,
+				Wait:    1 * time.Second,
+				MaxWait: 3 * time.Second,
+			}))
+			if err != nil {
+				return err
+			}
+
+			if err := client.Register(ctx, httpClient, username, password); err != nil {
+				return fmt.Errorf("не удалось выполнить регистрацию: %w", err)
+			}
+
+			log.Println("Регистрация прошла успешно")
+			return nil
 		},
-	))
-	if err != nil {
-		return err
 	}
 
-	switch command {
-	case "register":
-		err := client.Register(ctx, httpClient, username, password)
-		if err != nil {
-			return fmt.Errorf("не удалось выполнить регистрацию: %w", err)
-		}
-		return nil
+	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
+	cmd.Flags().StringVarP(&username, "username", "u", "user", "Имя пользователя для регистрации")
+	cmd.Flags().StringVarP(&password, "password", "p", "password", "Пароль пользователя для регистрации")
+	return cmd
+}
 
-	case "device":
-		deviceUUID, err := client.AddDevice(ctx, httpClient, username, password, publicKey)
-		if err != nil {
-			return fmt.Errorf("не удалось добавить устройство: %w", err)
-		}
+// newDeviceCommand создаёт команду 'device' для добавления нового устройства
+func newDeviceCommand() *cobra.Command {
+	var address, username, password, publicKey string
 
-		configDir := os.ExpandEnv("$HOME/.config")
-		if err := os.MkdirAll(configDir, 0o755); err != nil {
-			return fmt.Errorf("не удалось создать директорию конфигурации: %w", err)
-		}
+	cmd := &cobra.Command{
+		Use:     "device",
+		Short:   "Добавление нового устройства для пользователя",
+		Example: "bil-message-client device --username testuser --password secret --public-key key123 --address http://localhost:8080",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			httpClient, err := http.New(address, http.WithRetryPolicy(http.RetryPolicy{
+				Count:   3,
+				Wait:    1 * time.Second,
+				MaxWait: 3 * time.Second,
+			}))
+			if err != nil {
+				return err
+			}
 
-		deviceFile := fmt.Sprintf("%s/bil_message_client_device_uuid", configDir)
-		if err := os.WriteFile(deviceFile, []byte(deviceUUID.String()), 0o600); err != nil {
-			return fmt.Errorf("не удалось записать uuid устройства в файл: %w", err)
-		}
+			deviceUUID, err := client.AddDevice(ctx, httpClient, username, password, publicKey)
+			if err != nil {
+				return fmt.Errorf("не удалось добавить устройство: %w", err)
+			}
 
-		log.Println("uuid устройства сохранён в файле:", deviceFile)
-		return nil
+			configDir := os.ExpandEnv("$HOME/.config")
+			if err := os.MkdirAll(configDir, 0o755); err != nil {
+				return fmt.Errorf("не удалось создать директорию конфигурации: %w", err)
+			}
 
-	case "login":
-		configDir := os.ExpandEnv("$HOME/.config")
-		deviceFile := fmt.Sprintf("%s/bil_message_client_device_uuid", configDir)
+			deviceFile := fmt.Sprintf("%s/bil_message_client_device_uuid", configDir)
+			if err := os.WriteFile(deviceFile, []byte(deviceUUID.String()), 0o600); err != nil {
+				return fmt.Errorf("не удалось записать uuid устройства в файл: %w", err)
+			}
 
-		data, err := os.ReadFile(deviceFile)
-		if err != nil {
-			return fmt.Errorf("не удалось прочитать UUID устройства из файла: %w", err)
-		}
+			cmd.Println("UUID устройства сохранён в файле:", deviceFile)
+			return nil
+		},
+	}
 
-		deviceUUID, err := uuid.Parse(string(data))
-		if err != nil {
-			return fmt.Errorf("некорректный uuid устройства в файле: %w", err)
-		}
+	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
+	cmd.Flags().StringVarP(&username, "username", "u", "user", "Имя пользователя")
+	cmd.Flags().StringVarP(&password, "password", "p", "password", "Пароль пользователя")
+	cmd.Flags().StringVarP(&publicKey, "public-key", "k", "key", "Публичный ключ устройства")
+	return cmd
+}
 
-		token, err := client.Login(ctx, httpClient, username, password, deviceUUID)
-		if err != nil {
-			return fmt.Errorf("не удалось выполнить вход: %w", err)
-		}
+// newLoginCommand создаёт команду 'login' для входа пользователя
+func newLoginCommand() *cobra.Command {
+	var address, username, password string
 
-		log.Println(token)
-		return nil
+	cmd := &cobra.Command{
+		Use:     "login",
+		Short:   "Вход пользователя",
+		Example: "bil-message-client login --username testuser --password secret --address http://localhost:8080",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			httpClient, err := http.New(address, http.WithRetryPolicy(http.RetryPolicy{
+				Count:   3,
+				Wait:    1 * time.Second,
+				MaxWait: 3 * time.Second,
+			}))
+			if err != nil {
+				return err
+			}
 
-	default:
-		return fmt.Errorf("неизвестная команда: %s", command)
+			configDir := os.ExpandEnv("$HOME/.config")
+			deviceFile := fmt.Sprintf("%s/bil_message_client_device_uuid", configDir)
+
+			data, err := os.ReadFile(deviceFile)
+			if err != nil {
+				return fmt.Errorf("не удалось прочитать UUID устройства из файла: %w", err)
+			}
+
+			deviceUUID, err := uuid.Parse(string(data))
+			if err != nil {
+				return fmt.Errorf("некорректный uuid устройства в файле: %w", err)
+			}
+
+			token, err := client.Login(ctx, httpClient, username, password, deviceUUID)
+			if err != nil {
+				return fmt.Errorf("не удалось выполнить вход: %w", err)
+			}
+
+			cmd.Println(token)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
+	cmd.Flags().StringVarP(&username, "username", "u", "user", "Имя пользователя")
+	cmd.Flags().StringVarP(&password, "password", "p", "password", "Пароль пользователя")
+	return cmd
+}
+
+// newVersionCommand создаёт команду 'version' для вывода информации о версии клиента
+func newVersionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:     "version",
+		Short:   "Показать информацию о версии клиента",
+		Example: "bil-message-client version",
+		Run: func(cmd *cobra.Command, args []string) {
+			cmd.Println("bil-message-client")
+			cmd.Printf("Версия: %s\n", buildVersion)
+			cmd.Printf("Коммит: %s\n", buildCommit)
+			cmd.Printf("Дата сборки: %s\n", buildDate)
+		},
 	}
 }
