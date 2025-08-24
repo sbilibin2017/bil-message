@@ -25,3 +25,12 @@ type UserDB struct {
 	CreatedAt    time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at" db:"updated_at"`
 }
+
+// UserDeviceDB представляет запись устройства пользователя в базе
+type UserDeviceDB struct {
+	DeviceUUID uuid.UUID `json:"device_uuid" db:"device_uuid"` // UUID устройства (PK)
+	UserUUID   uuid.UUID `json:"user_uuid" db:"user_uuid"`     // UUID пользователя (FK)
+	PublicKey  string    `json:"public_key" db:"public_key"`   // Публичный ключ устройства
+	CreatedAt  time.Time `json:"created_at" db:"created_at"`   // Время создания записи
+	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`   // Время последнего обновления записи
+}

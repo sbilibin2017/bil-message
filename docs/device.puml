@@ -7,7 +7,7 @@ participant Server
 Client -> Client: Ввод username и password
 Client -> Client: Генерация пары ключей устройства (private/public)
 
-Client -> Server: POST /device/add {username, password, public_key}
+Client -> Server: POST /device {username, password, public_key}
 
 Server -> Server: Проверка пользователя (username/password)
 Server -> Server: Добавление устройства к пользовател (user_uuid + public_key)

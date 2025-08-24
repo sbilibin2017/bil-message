@@ -11,9 +11,10 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
-	"github.com/sbilibin2017/bil-message/internal/configs/db"
 	"github.com/sbilibin2017/bil-message/internal/handlers"
+	"github.com/sbilibin2017/bil-message/internal/jwt"
 	"github.com/sbilibin2017/bil-message/internal/repositories"
+	"github.com/sbilibin2017/bil-message/internal/repositories/db"
 	"github.com/sbilibin2017/bil-message/internal/services"
 	"github.com/spf13/pflag"
 )
@@ -27,7 +28,7 @@ func main() {
 	}
 }
 
-// Флаги сборки(ldflags)
+// Флаги сборки (ldflags)
 var (
 	buildCommit  string = "N/A"
 	buildDate    string = "N/A"
@@ -44,25 +45,27 @@ func printBuildInfo() {
 
 // Флаги командной строки
 var (
-	address     string
-	databaseDSN string
+	address      string
+	databaseDSN  string
+	jwtSecretKey string
+	jwtExp       int
 )
 
-// parseFlags парсит флаги мкомандной строки
+// parseFlags парсит флаги командной строки
 func parseFlags() {
 	pflag.StringVarP(&address, "address", "a", ":8080", "Адрес и порт для запуска сервера")
 	pflag.StringVarP(&databaseDSN, "database-dsn", "d", "postgres://user:pass@localhost:5432/db?sslmode=disable", "DSN для подключения к базе данных")
+	pflag.StringVarP(&jwtSecretKey, "jwt-secret", "", "super-secret-key", "Секретный ключ для генерации JWT")
+	pflag.IntVarP(&jwtExp, "jwt-expiration", "", 86400, "Время жизни JWT токена в секундах")
 	pflag.Parse()
 }
 
-// run запускает HTTP-сервер с поддержкой graceful shutdown
+// run выполняет запуск сервера
 func run(ctx context.Context) error {
-	// Контекст с отменой по сигналу прерывания
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
-	// Подключение к базе данных
-	dbConn, err := db.New(
+	db, err := db.New(
 		"pgx",
 		databaseDSN,
 		db.WithMaxOpenConns(10),
@@ -71,16 +74,29 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer dbConn.Close()
+	defer db.Close()
 
-	// Репозитории
-	userReadRepo := repositories.NewUserReadRepository(dbConn)
-	userWriteRepo := repositories.NewUserWriteRepository(dbConn)
+	userReadRepo := repositories.NewUserReadRepository(db)
+	userWriteRepo := repositories.NewUserWriteRepository(db)
+	deviceReadRepo := repositories.NewDeviceReadRepository(db)
+	deviceWriteRepo := repositories.NewDeviceWriteRepository(db)
 
-	// Сервис аутентификации
-	authService := services.NewAuthService(userReadRepo, userWriteRepo)
+	jwtGen, err := jwt.New(
+		jwt.WithSecretKey(jwtSecretKey),
+		jwt.WithExpiration(time.Duration(jwtExp)*time.Second),
+	)
+	if err != nil {
+		return err
+	}
 
-	// Настройка Chi роутера
+	authService := services.NewAuthService(
+		userReadRepo,
+		userWriteRepo,
+		deviceReadRepo,
+		deviceWriteRepo,
+		jwtGen,
+	)
+
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
@@ -88,19 +104,18 @@ func run(ctx context.Context) error {
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
 			r.Post("/register", handlers.RegisterHandler(authService))
+			r.Post("/device", handlers.AddDeviceHandler(authService))
+			r.Post("/login", handlers.LoginHandler(authService))
 		})
 	})
 
-	// HTTP-сервер
 	srv := &http.Server{
 		Addr:    address,
 		Handler: r,
 	}
 
-	// Канал для ошибок сервера
 	errChan := make(chan error, 1)
 
-	// Запуск сервера в отдельной горутине
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errChan <- err
@@ -108,7 +123,6 @@ func run(ctx context.Context) error {
 		close(errChan)
 	}()
 
-	// Ожидание сигнала или ошибки сервера
 	select {
 	case <-ctx.Done():
 		ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -117,7 +131,6 @@ func run(ctx context.Context) error {
 			return err
 		}
 		return nil
-
 	case err := <-errChan:
 		return err
 	}
