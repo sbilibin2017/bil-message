@@ -11,5 +11,5 @@ Server -> Server: Проверка уникальности username
 Server -> Server: Хеширование пароля
 Server -> Server: Создание записи в User
 
-Server --> Client: user_uuid / подтверждение регистрации
+Server --> Client: Подтверждение регистрации
 @enduml
