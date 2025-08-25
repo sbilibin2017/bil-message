@@ -162,7 +162,7 @@ paths:
       summary: Создание новой комнаты
       tags:
       - Chat
-  /chat/{chat-uuid}:
+  /chat/{room-uuid}:
     delete:
       consumes:
       - text/plain
@@ -170,7 +170,7 @@ paths:
       parameters:
       - description: UUID комнаты
         in: path
-        name: chat-uuid
+        name: room-uuid
         required: true
         type: string
       produces:
@@ -189,7 +189,7 @@ paths:
       summary: Удаление комнаты
       tags:
       - Chat
-  /chat/{chat-uuid}/{member-uuid}:
+  /chat/{room-uuid}/{member-uuid}:
     delete:
       consumes:
       - text/plain
@@ -197,7 +197,7 @@ paths:
       parameters:
       - description: UUID комнаты
         in: path
-        name: chat-uuid
+        name: room-uuid
         required: true
         type: string
       - description: UUID пользователя
@@ -228,7 +228,7 @@ paths:
       parameters:
       - description: UUID комнаты
         in: path
-        name: chat-uuid
+        name: room-uuid
         required: true
         type: string
       - description: UUID пользователя
@@ -250,6 +250,30 @@ paths:
         "500":
           description: Внутренняя ошибка сервера
       summary: Добавление пользователя в комнату
+      tags:
+      - Chat
+  /chat/ws/{room-uuid}:
+    get:
+      consumes:
+      - text/plain
+      description: Создает WebSocket соединение для конкретной комнаты. Сообщения
+        рассылаются всем участникам, кроме отправителя.
+      parameters:
+      - description: UUID комнаты
+        in: path
+        name: room-uuid
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "101":
+          description: WebSocket соединение установлено
+        "400":
+          description: Некорректный UUID комнаты
+        "401":
+          description: Неавторизован
+      summary: WebSocket соединение для чата
       tags:
       - Chat
 swagger: "2.0"

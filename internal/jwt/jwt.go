@@ -10,11 +10,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type contextKey string
-
-const userUUIDCtxKey contextKey = "user_uuid"
-const deviceUUIDCtxKey contextKey = "device_uuid"
-
 // JWT представляет работу с JWT-токенами.
 type JWT struct {
 	secretKey []byte

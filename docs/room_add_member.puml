@@ -4,9 +4,9 @@ title Добавление пользователя в комнату (толь�
 actor Client
 participant Server
 
-Client -> Client: Ввод chat-uuid и member-uuid участника
+Client -> Client: Ввод room-uuid и member-uuid участника
 
-Client -> Server: POST /chat/{chat-uuid}/{member-uuid} {chat-uuid, member-uuid,JWT}
+Client -> Server: POST /chat/{room-uuid}/{member-uuid} {room-uuid, member-uuid,JWT}
 
 Server -> Server: Проверка JWT
 Server -> Server: Проверка, что пользователь является создателем комнаты
