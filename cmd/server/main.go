@@ -83,10 +83,17 @@ func run(ctx context.Context) error {
 
 	userReadRepo := repositories.NewUserReadRepository(db)
 	userWriteRepo := repositories.NewUserWriteRepository(db)
+
 	deviceReadRepo := repositories.NewDeviceReadRepository(db)
 	deviceWriteRepo := repositories.NewDeviceWriteRepository(db)
 
-	jwtGen, err := jwt.New(
+	roomReadRepo := repositories.NewRoomReadRepository(db)
+	roomWriteRepo := repositories.NewRoomWriteRepository(db)
+
+	roomMemberReadRepo := repositories.NewRoomMemberReadRepository(db)
+	roomMemberWriteRepo := repositories.NewRoomMemberWriteRepository(db)
+
+	jwt, err := jwt.New(
 		jwt.WithSecretKey(jwtSecretKey),
 		jwt.WithExpiration(time.Duration(jwtExp)*time.Second),
 	)
@@ -99,7 +106,14 @@ func run(ctx context.Context) error {
 		userWriteRepo,
 		deviceReadRepo,
 		deviceWriteRepo,
-		jwtGen,
+		jwt,
+	)
+
+	chatService := services.NewChatService(
+		roomWriteRepo,
+		roomReadRepo,
+		roomMemberWriteRepo,
+		roomMemberReadRepo,
 	)
 
 	r := chi.NewRouter()
@@ -111,6 +125,13 @@ func run(ctx context.Context) error {
 			r.Post("/register", handlers.RegisterHandler(authService))
 			r.Post("/device", handlers.AddDeviceHandler(authService))
 			r.Post("/login", handlers.LoginHandler(authService))
+		})
+
+		r.Route("/chat", func(r chi.Router) {
+			r.Post("/", handlers.CreateChatHandler(chatService, jwt))
+			r.Delete("/{chat-uuid}", handlers.RemoveChatHandler(chatService, jwt))
+			r.Post("/{chat-uuid}/member", handlers.AddChatMemberHandler(chatService, jwt))
+			r.Delete("/{chat-uuid}/member", handlers.RemoveChatMemberHandler(chatService, jwt))
 		})
 	})
 

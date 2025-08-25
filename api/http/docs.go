@@ -131,6 +131,159 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/chat": {
+            "post": {
+                "description": "Создаёт новую комнату для текущего пользователя",
+                "consumes": [
+                    "text/plain"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Chat"
+                ],
+                "summary": "Создание новой комнаты",
+                "responses": {
+                    "200": {
+                        "description": "UUID комнаты",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Некорректные данные запроса"
+                    },
+                    "401": {
+                        "description": "Неавторизован"
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера"
+                    }
+                }
+            }
+        },
+        "/chat/{chat-uuid}": {
+            "delete": {
+                "description": "Удаляет комнату по UUID",
+                "consumes": [
+                    "text/plain"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Chat"
+                ],
+                "summary": "Удаление комнаты",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID комнаты",
+                        "name": "chat-uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Комната успешно удалена"
+                    },
+                    "400": {
+                        "description": "Некорректные данные запроса"
+                    },
+                    "401": {
+                        "description": "Неавторизован"
+                    },
+                    "404": {
+                        "description": "Комната не найдена"
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера"
+                    }
+                }
+            }
+        },
+        "/chat/{chat-uuid}/member": {
+            "post": {
+                "description": "Добавляет текущего пользователя (из токена) в комнату",
+                "consumes": [
+                    "text/plain"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Chat"
+                ],
+                "summary": "Добавление пользователя в комнату",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID комнаты",
+                        "name": "chat-uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Пользователь успешно добавлен"
+                    },
+                    "400": {
+                        "description": "Некорректные данные запроса"
+                    },
+                    "401": {
+                        "description": "Неавторизован"
+                    },
+                    "404": {
+                        "description": "Комната не найдена"
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера"
+                    }
+                }
+            },
+            "delete": {
+                "description": "Удаляет текущего пользователя (из токена) из комнаты",
+                "consumes": [
+                    "text/plain"
+                ],
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "Chat"
+                ],
+                "summary": "Удаление пользователя из комнаты",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID комнаты",
+                        "name": "chat-uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Пользователь успешно удалён"
+                    },
+                    "400": {
+                        "description": "Некорректные данные запроса"
+                    },
+                    "401": {
+                        "description": "Неавторизован"
+                    },
+                    "404": {
+                        "description": "Комната или пользователь не найдены"
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера"
+                    }
+                }
+            }
         }
     },
     "definitions": {

@@ -34,6 +34,10 @@ func run() error {
 		newDeviceCommand(),
 		newLoginCommand(),
 		newVersionCommand(),
+		newCreateChatCommand(),
+		newRemoveChatCommand(),
+		newAddChatMemberCommand(),
+		newRemoveChatMemberCommand(),
 	)
 	return cmd.Execute()
 }
@@ -188,4 +192,140 @@ func newVersionCommand() *cobra.Command {
 			cmd.Printf("Дата сборки: %s\n", buildDate)
 		},
 	}
+}
+
+// Создание новой комнаты
+func newCreateChatCommand() *cobra.Command {
+	var address, token string
+
+	cmd := &cobra.Command{
+		Use:   "create",
+		Short: "Создать новую комнату",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			httpClient, err := http.New(address)
+			if err != nil {
+				return err
+			}
+
+			roomUUID, err := client.CreateChat(ctx, httpClient, token)
+			if err != nil {
+				return fmt.Errorf("не удалось создать чат: %w", err)
+			}
+
+			cmd.Println(roomUUID.String())
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
+	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
+	cmd.MarkFlagRequired("token")
+
+	return cmd
+}
+
+// Удаление комнаты
+func newRemoveChatCommand() *cobra.Command {
+	var address, token, chatUUID string
+
+	cmd := &cobra.Command{
+		Use:   "remove",
+		Short: "Удалить комнату",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			httpClient, err := http.New(address)
+			if err != nil {
+				return err
+			}
+
+			uuidRoom, err := uuid.Parse(chatUUID)
+			if err != nil {
+				return fmt.Errorf("некорректный UUID комнаты: %w", err)
+			}
+
+			if err := client.RemoveChat(ctx, httpClient, token, uuidRoom); err != nil {
+				return fmt.Errorf("не удалось удалить чат: %w", err)
+			}
+
+			cmd.Println("Комната успешно удалена")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
+	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
+	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+
+	return cmd
+}
+
+// Добавление текущего пользователя в комнату
+func newAddChatMemberCommand() *cobra.Command {
+	var address, token, chatUUID string
+
+	cmd := &cobra.Command{
+		Use:   "add-member",
+		Short: "Добавить текущего пользователя в комнату",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			httpClient, err := http.New(address)
+			if err != nil {
+				return err
+			}
+
+			uuidRoom, err := uuid.Parse(chatUUID)
+			if err != nil {
+				return fmt.Errorf("некорректный UUID комнаты: %w", err)
+			}
+
+			if err := client.AddChatMember(ctx, httpClient, token, uuidRoom); err != nil {
+				return fmt.Errorf("не удалось добавить пользователя в чат: %w", err)
+			}
+
+			cmd.Println("Пользователь успешно добавлен в комнату")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
+	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
+	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+
+	return cmd
+}
+
+// Удаление текущего пользователя из комнаты
+func newRemoveChatMemberCommand() *cobra.Command {
+	var address, token, chatUUID string
+
+	cmd := &cobra.Command{
+		Use:   "remove-member",
+		Short: "Удалить текущего пользователя из комнаты",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := context.Background()
+			httpClient, err := http.New(address)
+			if err != nil {
+				return err
+			}
+
+			uuidRoom, err := uuid.Parse(chatUUID)
+			if err != nil {
+				return fmt.Errorf("некорректный UUID комнаты: %w", err)
+			}
+
+			if err := client.RemoveChatMember(ctx, httpClient, token, uuidRoom); err != nil {
+				return fmt.Errorf("не удалось удалить пользователя из чата: %w", err)
+			}
+
+			cmd.Println("Пользователь успешно удалён из комнаты")
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
+	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
+	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+
+	return cmd
 }
