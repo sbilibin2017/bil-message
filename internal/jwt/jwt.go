@@ -2,6 +2,9 @@ package jwt
 
 import (
 	"errors"
+	"log"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -86,7 +89,7 @@ func (j *JWT) Generate(userUUID uuid.UUID, deviceUUID uuid.UUID) (string, error)
 	return token.SignedString(j.secretKey)
 }
 
-// Parse проверяет токен и возвращает TokenPayload.
+// Parse парсит токен.
 func (j *JWT) Parse(tokenString string) (userUUID uuid.UUID, deviceUUID uuid.UUID, err error) {
 	c := &claims{}
 
@@ -108,4 +111,28 @@ func (j *JWT) Parse(tokenString string) (userUUID uuid.UUID, deviceUUID uuid.UUI
 	}
 
 	return userUUID, deviceUUID, nil
+}
+
+// GetFromRequest получает токен из запроса.
+func (j *JWT) GetFromRequest(r *http.Request) (string, error) {
+	authHeader := r.Header.Get("Authorization")
+	log.Println("[GetFromRequest] Authorization header:", authHeader)
+
+	if authHeader == "" {
+		return "", errors.New("missing authorization header")
+	}
+
+	parts := strings.Fields(authHeader)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+		log.Println("[GetFromRequest] Ошибка: неверный формат заголовка Authorization")
+		return "", errors.New("invalid authorization header format")
+	}
+
+	token := strings.TrimSpace(parts[1])
+	if token == "" {
+		return "", errors.New("empty token in authorization header")
+	}
+
+	log.Println("[GetFromRequest] Получен JWT токен:", token)
+	return token, nil
 }

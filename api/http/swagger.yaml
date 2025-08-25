@@ -141,4 +141,105 @@ paths:
       summary: Регистрация нового пользователя
       tags:
       - Auth
+  /chat:
+    post:
+      consumes:
+      - text/plain
+      description: Создаёт новую комнату для текущего пользователя
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: UUID комнаты
+          schema:
+            type: string
+        "400":
+          description: Некорректные данные запроса
+        "401":
+          description: Неавторизован
+        "500":
+          description: Внутренняя ошибка сервера
+      summary: Создание новой комнаты
+      tags:
+      - Chat
+  /chat/{chat-uuid}:
+    delete:
+      consumes:
+      - text/plain
+      description: Удаляет комнату по UUID
+      parameters:
+      - description: UUID комнаты
+        in: path
+        name: chat-uuid
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Комната успешно удалена
+        "400":
+          description: Некорректные данные запроса
+        "401":
+          description: Неавторизован
+        "404":
+          description: Комната не найдена
+        "500":
+          description: Внутренняя ошибка сервера
+      summary: Удаление комнаты
+      tags:
+      - Chat
+  /chat/{chat-uuid}/member:
+    delete:
+      consumes:
+      - text/plain
+      description: Удаляет текущего пользователя (из токена) из комнаты
+      parameters:
+      - description: UUID комнаты
+        in: path
+        name: chat-uuid
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Пользователь успешно удалён
+        "400":
+          description: Некорректные данные запроса
+        "401":
+          description: Неавторизован
+        "404":
+          description: Комната или пользователь не найдены
+        "500":
+          description: Внутренняя ошибка сервера
+      summary: Удаление пользователя из комнаты
+      tags:
+      - Chat
+    post:
+      consumes:
+      - text/plain
+      description: Добавляет текущего пользователя (из токена) в комнату
+      parameters:
+      - description: UUID комнаты
+        in: path
+        name: chat-uuid
+        required: true
+        type: string
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: Пользователь успешно добавлен
+        "400":
+          description: Некорректные данные запроса
+        "401":
+          description: Неавторизован
+        "404":
+          description: Комната не найдена
+        "500":
+          description: Внутренняя ошибка сервера
+      summary: Добавление пользователя в комнату
+      tags:
+      - Chat
 swagger: "2.0"
