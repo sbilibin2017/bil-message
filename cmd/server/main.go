@@ -130,8 +130,8 @@ func run(ctx context.Context) error {
 		r.Route("/chat", func(r chi.Router) {
 			r.Post("/", handlers.CreateChatHandler(chatService, jwt))
 			r.Delete("/{chat-uuid}", handlers.RemoveChatHandler(chatService, jwt))
-			r.Post("/{chat-uuid}/member", handlers.AddChatMemberHandler(chatService, jwt))
-			r.Delete("/{chat-uuid}/member", handlers.RemoveChatMemberHandler(chatService, jwt))
+			r.Post("/{chat-uuid}/{member-uuid}", handlers.AddChatMemberHandler(chatService, jwt))
+			r.Delete("/{chat-uuid}/{member-uuid}", handlers.RemoveChatMemberHandler(chatService, jwt))
 		})
 	})
 

@@ -70,11 +70,13 @@ func newRegisterCommand() *cobra.Command {
 				return err
 			}
 
-			if err := client.Register(ctx, httpClient, username, password); err != nil {
+			userUUID, err := client.Register(ctx, httpClient, username, password)
+			if err != nil {
 				return fmt.Errorf("не удалось выполнить регистрацию: %w", err)
 			}
 
-			log.Println("Регистрация прошла успешно")
+			cmd.Println(userUUID.String())
+
 			return nil
 		},
 	}
@@ -119,7 +121,7 @@ func newDeviceCommand() *cobra.Command {
 				return fmt.Errorf("не удалось записать uuid устройства в файл: %w", err)
 			}
 
-			cmd.Println("UUID устройства сохранён в файле:", deviceFile)
+			cmd.Println(deviceUUID.String())
 			return nil
 		},
 	}
@@ -220,7 +222,7 @@ func newCreateChatCommand() *cobra.Command {
 
 	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
 	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
-	cmd.MarkFlagRequired("token")
+	cmd.MarkFlagRequired("token") // обязательно
 
 	return cmd
 }
@@ -256,17 +258,19 @@ func newRemoveChatCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
 	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
 	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+	cmd.MarkFlagRequired("token")
+	cmd.MarkFlagRequired("chat-uuid")
 
 	return cmd
 }
 
-// Добавление текущего пользователя в комнату
+// Добавление пользователя в комнату
 func newAddChatMemberCommand() *cobra.Command {
-	var address, token, chatUUID string
+	var address, token, chatUUID, memberUUID string
 
 	cmd := &cobra.Command{
 		Use:   "add-member",
-		Short: "Добавить текущего пользователя в комнату",
+		Short: "Добавить пользователя в комнату",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address)
@@ -279,7 +283,12 @@ func newAddChatMemberCommand() *cobra.Command {
 				return fmt.Errorf("некорректный UUID комнаты: %w", err)
 			}
 
-			if err := client.AddChatMember(ctx, httpClient, token, uuidRoom); err != nil {
+			uuidMember, err := uuid.Parse(memberUUID)
+			if err != nil {
+				return fmt.Errorf("некорректный UUID пользователя: %w", err)
+			}
+
+			if err := client.AddChatMember(ctx, httpClient, token, uuidRoom, uuidMember); err != nil {
 				return fmt.Errorf("не удалось добавить пользователя в чат: %w", err)
 			}
 
@@ -291,17 +300,21 @@ func newAddChatMemberCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
 	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
 	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+	cmd.Flags().StringVarP(&memberUUID, "member-uuid", "m", "", "UUID пользователя для добавления")
+	cmd.MarkFlagRequired("token")
+	cmd.MarkFlagRequired("chat-uuid")
+	cmd.MarkFlagRequired("member-uuid")
 
 	return cmd
 }
 
-// Удаление текущего пользователя из комнаты
+// Удаление пользователя из комнаты
 func newRemoveChatMemberCommand() *cobra.Command {
-	var address, token, chatUUID string
+	var address, token, chatUUID, memberUUID string
 
 	cmd := &cobra.Command{
 		Use:   "remove-member",
-		Short: "Удалить текущего пользователя из комнаты",
+		Short: "Удалить пользователя из комнаты",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address)
@@ -314,7 +327,12 @@ func newRemoveChatMemberCommand() *cobra.Command {
 				return fmt.Errorf("некорректный UUID комнаты: %w", err)
 			}
 
-			if err := client.RemoveChatMember(ctx, httpClient, token, uuidRoom); err != nil {
+			uuidMember, err := uuid.Parse(memberUUID)
+			if err != nil {
+				return fmt.Errorf("некорректный UUID пользователя: %w", err)
+			}
+
+			if err := client.RemoveChatMember(ctx, httpClient, token, uuidRoom, uuidMember); err != nil {
 				return fmt.Errorf("не удалось удалить пользователя из чата: %w", err)
 			}
 
@@ -326,6 +344,10 @@ func newRemoveChatMemberCommand() *cobra.Command {
 	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
 	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
 	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+	cmd.Flags().StringVarP(&memberUUID, "member-uuid", "m", "", "UUID пользователя для удаления")
+	cmd.MarkFlagRequired("token")
+	cmd.MarkFlagRequired("chat-uuid")
+	cmd.MarkFlagRequired("member-uuid")
 
 	return cmd
 }

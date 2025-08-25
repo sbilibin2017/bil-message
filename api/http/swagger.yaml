@@ -189,15 +189,20 @@ paths:
       summary: Удаление комнаты
       tags:
       - Chat
-  /chat/{chat-uuid}/member:
+  /chat/{chat-uuid}/{member-uuid}:
     delete:
       consumes:
       - text/plain
-      description: Удаляет текущего пользователя (из токена) из комнаты
+      description: Удаляет указанного пользователя (member-uuid) из комнаты
       parameters:
       - description: UUID комнаты
         in: path
         name: chat-uuid
+        required: true
+        type: string
+      - description: UUID пользователя
+        in: path
+        name: member-uuid
         required: true
         type: string
       produces:
@@ -219,11 +224,16 @@ paths:
     post:
       consumes:
       - text/plain
-      description: Добавляет текущего пользователя (из токена) в комнату
+      description: Добавляет указанного пользователя (member-uuid) в комнату
       parameters:
       - description: UUID комнаты
         in: path
         name: chat-uuid
+        required: true
+        type: string
+      - description: UUID пользователя
+        in: path
+        name: member-uuid
         required: true
         type: string
       produces:

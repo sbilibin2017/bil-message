@@ -4,15 +4,11 @@ title Создание комнаты (групповой чат)
 actor Client
 participant Server
 
-Client -> Client: Ввод имени комнаты
-
-Client -> Server: POST /rooms {room_name, JWT}
-
+Client -> Server: POST /chat {JWT}
 Server -> Server: Проверка JWT
 Server -> Server: Создание записи в таблице room
 Server -> Server: Добавление создателя в room_member
 Server -> Server: Инициализация ключа комнаты для E2EE
-
-Server --> Client: room_uuid, подтверждение создания комнаты
+Server --> Client: chat_uuid, подтверждение создания комнаты
 
 @enduml

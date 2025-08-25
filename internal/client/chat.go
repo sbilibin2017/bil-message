@@ -52,14 +52,14 @@ func RemoveChat(ctx context.Context, client *resty.Client, token string, roomUUI
 	return nil
 }
 
-// AddChatMember добавляет текущего пользователя в указанную комнату
-func AddChatMember(ctx context.Context, client *resty.Client, token string, roomUUID uuid.UUID) error {
+// AddChatMember добавляет пользователя в указанную комнату
+func AddChatMember(ctx context.Context, client *resty.Client, token string, chatUUID uuid.UUID, memberUUID uuid.UUID) error {
 	token = strings.TrimSpace(token)
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "text/plain").
 		SetAuthToken(token).
-		Post("/chat/" + roomUUID.String() + "/member")
+		Post("/chat/" + chatUUID.String() + "/" + memberUUID.String())
 	if err != nil {
 		return err
 	}
@@ -71,14 +71,14 @@ func AddChatMember(ctx context.Context, client *resty.Client, token string, room
 	return nil
 }
 
-// RemoveChatMember удаляет текущего пользователя из указанной комнаты
-func RemoveChatMember(ctx context.Context, client *resty.Client, token string, roomUUID uuid.UUID) error {
+// RemoveChatMember удаляет пользователя из указанной комнаты
+func RemoveChatMember(ctx context.Context, client *resty.Client, token string, chatUUID uuid.UUID, memberUUID uuid.UUID) error {
 	token = strings.TrimSpace(token)
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "text/plain").
 		SetAuthToken(token).
-		Delete("/chat/" + roomUUID.String() + "/member")
+		Delete("/chat/" + chatUUID.String() + "/" + memberUUID.String())
 	if err != nil {
 		return err
 	}

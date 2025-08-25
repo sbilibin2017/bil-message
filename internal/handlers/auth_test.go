@@ -25,6 +25,7 @@ func TestRegisterHandler(t *testing.T) {
 		reqBody    interface{}
 		mockSetup  func()
 		wantStatus int
+		wantBody   string
 	}{
 		{
 			name: "successful registration",
@@ -35,15 +36,17 @@ func TestRegisterHandler(t *testing.T) {
 			mockSetup: func() {
 				mockSvc.EXPECT().
 					Register(gomock.Any(), "johndoe", "secret").
-					Return(nil)
+					Return(uuid.MustParse("123e4567-e89b-12d3-a456-426614174000"), nil)
 			},
 			wantStatus: http.StatusOK,
+			wantBody:   "123e4567-e89b-12d3-a456-426614174000",
 		},
 		{
 			name:       "invalid JSON",
 			reqBody:    "{invalid-json",
 			mockSetup:  func() {},
 			wantStatus: http.StatusBadRequest,
+			wantBody:   "",
 		},
 		{
 			name: "empty username",
@@ -53,6 +56,7 @@ func TestRegisterHandler(t *testing.T) {
 			},
 			mockSetup:  func() {},
 			wantStatus: http.StatusBadRequest,
+			wantBody:   "",
 		},
 		{
 			name: "username already exists",
@@ -63,9 +67,10 @@ func TestRegisterHandler(t *testing.T) {
 			mockSetup: func() {
 				mockSvc.EXPECT().
 					Register(gomock.Any(), "johndoe", "secret").
-					Return(services.ErrUsernameAlreadyExists)
+					Return(uuid.Nil, services.ErrUsernameAlreadyExists)
 			},
 			wantStatus: http.StatusConflict,
+			wantBody:   "",
 		},
 		{
 			name: "service error",
@@ -76,9 +81,10 @@ func TestRegisterHandler(t *testing.T) {
 			mockSetup: func() {
 				mockSvc.EXPECT().
 					Register(gomock.Any(), "johndoe", "secret").
-					Return(errors.New("service failure"))
+					Return(uuid.Nil, errors.New("service failure"))
 			},
 			wantStatus: http.StatusInternalServerError,
+			wantBody:   "",
 		},
 	}
 
@@ -101,11 +107,10 @@ func TestRegisterHandler(t *testing.T) {
 
 			resp := w.Result()
 			require.Equal(t, tt.wantStatus, resp.StatusCode)
-			require.Empty(t, w.Body.String())
+			require.Equal(t, tt.wantBody, w.Body.String())
 		})
 	}
 }
-
 func TestAddDeviceHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

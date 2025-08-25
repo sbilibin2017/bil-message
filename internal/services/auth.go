@@ -91,24 +91,30 @@ func (svc *AuthService) Register(
 	ctx context.Context,
 	username string,
 	password string,
-) error {
+) (userUUID uuid.UUID, err error) {
 	// Проверяем, существует ли пользователь
 	existing, err := svc.ug.Get(ctx, username)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 	if existing != nil {
-		return ErrUsernameAlreadyExists
+		return uuid.Nil, ErrUsernameAlreadyExists
 	}
 
 	// Хэшируем пароль
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 
+	userUUID = uuid.New()
+
 	// Сохраняем пользователя
-	return svc.us.Save(ctx, uuid.New(), username, string(hashedPassword))
+	err = svc.us.Save(ctx, userUUID, username, string(hashedPassword))
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return userUUID, nil
 }
 
 // AddDevice добавляет новое устройство пользователю.

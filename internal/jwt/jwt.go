@@ -2,7 +2,6 @@ package jwt
 
 import (
 	"errors"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -116,15 +115,12 @@ func (j *JWT) Parse(tokenString string) (userUUID uuid.UUID, deviceUUID uuid.UUI
 // GetFromRequest получает токен из запроса.
 func (j *JWT) GetFromRequest(r *http.Request) (string, error) {
 	authHeader := r.Header.Get("Authorization")
-	log.Println("[GetFromRequest] Authorization header:", authHeader)
-
 	if authHeader == "" {
 		return "", errors.New("missing authorization header")
 	}
 
 	parts := strings.Fields(authHeader)
 	if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-		log.Println("[GetFromRequest] Ошибка: неверный формат заголовка Authorization")
 		return "", errors.New("invalid authorization header format")
 	}
 
@@ -133,6 +129,5 @@ func (j *JWT) GetFromRequest(r *http.Request) (string, error) {
 		return "", errors.New("empty token in authorization header")
 	}
 
-	log.Println("[GetFromRequest] Получен JWT токен:", token)
 	return token, nil
 }

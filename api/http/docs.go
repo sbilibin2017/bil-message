@@ -205,9 +205,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/chat/{chat-uuid}/member": {
+        "/chat/{chat-uuid}/{member-uuid}": {
             "post": {
-                "description": "Добавляет текущего пользователя (из токена) в комнату",
+                "description": "Добавляет указанного пользователя (member-uuid) в комнату",
                 "consumes": [
                     "text/plain"
                 ],
@@ -223,6 +223,13 @@ const docTemplate = `{
                         "type": "string",
                         "description": "UUID комнаты",
                         "name": "chat-uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "UUID пользователя",
+                        "name": "member-uuid",
                         "in": "path",
                         "required": true
                     }
@@ -246,7 +253,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Удаляет текущего пользователя (из токена) из комнаты",
+                "description": "Удаляет указанного пользователя (member-uuid) из комнаты",
                 "consumes": [
                     "text/plain"
                 ],
@@ -262,6 +269,13 @@ const docTemplate = `{
                         "type": "string",
                         "description": "UUID комнаты",
                         "name": "chat-uuid",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "UUID пользователя",
+                        "name": "member-uuid",
                         "in": "path",
                         "required": true
                     }

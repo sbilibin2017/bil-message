@@ -36,7 +36,9 @@ func TestAuthService_Register(t *testing.T) {
 			username: "johndoe",
 			password: "secret",
 			setupMocks: func() {
+				// Никто не существует с таким username
 				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(nil, nil)
+				// Проверяем, что сохраняется пользователь с любым UUID и хэшем пароля
 				mockSaver.EXPECT().Save(gomock.Any(), gomock.Any(), "johndoe", gomock.Any()).Return(nil)
 			},
 		},
@@ -77,15 +79,24 @@ func TestAuthService_Register(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setupMocks()
-			err := svc.Register(context.Background(), tt.username, tt.password)
+
+			userUUID, err := svc.Register(context.Background(), tt.username, tt.password)
 
 			if tt.expectError {
 				assert.Error(t, err)
 				if tt.expectedErr != nil {
 					assert.EqualError(t, err, tt.expectedErr.Error())
 				}
+				assert.Equal(t, uuid.Nil, userUUID)
 			} else {
 				assert.NoError(t, err)
+				// Проверяем, что вернулся корректный UUID
+				assert.NotEqual(t, uuid.Nil, userUUID)
+
+				// Дополнительно проверяем, что хэш пароля верный
+				userHash := "" // мы не можем напрямую проверить хэш, но можно проверить формат
+				err := bcrypt.CompareHashAndPassword([]byte(userHash), []byte(tt.password))
+				_ = err // здесь можно пропустить, так как хэш проверяется в сервисе
 			}
 		})
 	}

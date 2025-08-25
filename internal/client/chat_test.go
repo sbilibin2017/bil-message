@@ -100,8 +100,10 @@ func TestRemoveChat_ServerError(t *testing.T) {
 
 func TestAddChatMember(t *testing.T) {
 	roomUUID := uuid.New()
+	memberUUID := uuid.New()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/chat/"+roomUUID.String()+"/member" {
+		expectedPath := "/chat/" + roomUUID.String() + "/" + memberUUID.String()
+		if r.URL.Path != expectedPath {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -114,36 +116,40 @@ func TestAddChatMember(t *testing.T) {
 	defer ts.Close()
 
 	client := resty.New().SetBaseURL(ts.URL)
-	err := AddChatMember(context.Background(), client, "token123", roomUUID)
+	err := AddChatMember(context.Background(), client, "token123", roomUUID, memberUUID)
 
 	assert.NoError(t, err)
 }
 
 func TestAddChatMember_NetworkError(t *testing.T) {
 	roomUUID := uuid.New()
+	memberUUID := uuid.New()
 	client := resty.New().SetBaseURL("http://127.0.0.1:0")
-	err := AddChatMember(context.Background(), client, "token123", roomUUID)
+	err := AddChatMember(context.Background(), client, "token123", roomUUID, memberUUID)
 
 	assert.Error(t, err)
 }
 
 func TestAddChatMember_ServerError(t *testing.T) {
 	roomUUID := uuid.New()
+	memberUUID := uuid.New()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}))
 	defer ts.Close()
 
 	client := resty.New().SetBaseURL(ts.URL)
-	err := AddChatMember(context.Background(), client, "token123", roomUUID)
+	err := AddChatMember(context.Background(), client, "token123", roomUUID, memberUUID)
 
 	assert.Error(t, err)
 }
 
 func TestRemoveChatMember(t *testing.T) {
 	roomUUID := uuid.New()
+	memberUUID := uuid.New()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/chat/"+roomUUID.String()+"/member" {
+		expectedPath := "/chat/" + roomUUID.String() + "/" + memberUUID.String()
+		if r.URL.Path != expectedPath {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
@@ -156,28 +162,30 @@ func TestRemoveChatMember(t *testing.T) {
 	defer ts.Close()
 
 	client := resty.New().SetBaseURL(ts.URL)
-	err := RemoveChatMember(context.Background(), client, "token123", roomUUID)
+	err := RemoveChatMember(context.Background(), client, "token123", roomUUID, memberUUID)
 
 	assert.NoError(t, err)
 }
 
 func TestRemoveChatMember_NetworkError(t *testing.T) {
 	roomUUID := uuid.New()
+	memberUUID := uuid.New()
 	client := resty.New().SetBaseURL("http://127.0.0.1:0")
-	err := RemoveChatMember(context.Background(), client, "token123", roomUUID)
+	err := RemoveChatMember(context.Background(), client, "token123", roomUUID, memberUUID)
 
 	assert.Error(t, err)
 }
 
 func TestRemoveChatMember_ServerError(t *testing.T) {
 	roomUUID := uuid.New()
+	memberUUID := uuid.New()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}))
 	defer ts.Close()
 
 	client := resty.New().SetBaseURL(ts.URL)
-	err := RemoveChatMember(context.Background(), client, "token123", roomUUID)
+	err := RemoveChatMember(context.Background(), client, "token123", roomUUID, memberUUID)
 
 	assert.Error(t, err)
 }

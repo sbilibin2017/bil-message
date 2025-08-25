@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 
 	"github.com/go-chi/chi"
@@ -52,39 +51,25 @@ type TokenParser interface {
 // @Router /chat [post]
 func CreateChatHandler(svc RoomCreator, parser TokenParser) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Println("[CreateChatHandler] Запрос на создание комнаты получен")
-
-		// Получение токена из запроса
 		token, err := parser.GetFromRequest(r)
 		if err != nil {
-			log.Println("[CreateChatHandler] Ошибка получения токена:", err)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		log.Println("[CreateChatHandler] Токен получен:", token)
 
-		// Парсинг токена
 		userUUID, _, err := parser.Parse(token)
 		if err != nil {
-			log.Println("[CreateChatHandler] Ошибка парсинга токена:", err)
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		log.Println("[CreateChatHandler] Пользователь успешно аутентифицирован, userUUID:", userUUID)
 
-		// Создание комнаты
 		roomUUID, err := svc.CreateRoom(r.Context(), userUUID)
 		if err != nil {
-			log.Println("[CreateChatHandler] Ошибка создания комнаты:", err)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		log.Println("[CreateChatHandler] Комната успешно создана, roomUUID:", roomUUID)
 
-		// Возврат ответа
-		if _, err := w.Write([]byte(roomUUID.String())); err != nil {
-			log.Println("[CreateChatHandler] Ошибка отправки ответа:", err)
-		}
+		w.Write([]byte(roomUUID.String()))
 	}
 }
 
@@ -104,6 +89,7 @@ func CreateChatHandler(svc RoomCreator, parser TokenParser) http.HandlerFunc {
 func RemoveChatHandler(svc RoomRemover, parser TokenParser) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		roomID := chi.URLParam(r, "chat-uuid")
+
 		roomUUID, err := uuid.Parse(roomID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -134,23 +120,32 @@ func RemoveChatHandler(svc RoomRemover, parser TokenParser) http.HandlerFunc {
 	}
 }
 
-// AddChatMemberHandler добавляет текущего пользователя в комнату
+// AddChatMemberHandler добавляет пользователя в комнату
 // @Summary Добавление пользователя в комнату
-// @Description Добавляет текущего пользователя (из токена) в комнату
+// @Description Добавляет указанного пользователя (member-uuid) в комнату
 // @Tags Chat
 // @Accept plain
 // @Produce plain
 // @Param chat-uuid path string true "UUID комнаты"
+// @Param member-uuid path string true "UUID пользователя"
 // @Success 200 "Пользователь успешно добавлен"
 // @Failure 400 "Некорректные данные запроса"
 // @Failure 401 "Неавторизован"
 // @Failure 404 "Комната не найдена"
 // @Failure 500 "Внутренняя ошибка сервера"
-// @Router /chat/{chat-uuid}/member [post]
+// @Router /chat/{chat-uuid}/{member-uuid} [post]
 func AddChatMemberHandler(svc RoomMemberAdder, parser TokenParser) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		roomID := chi.URLParam(r, "chat-uuid")
+		memberID := chi.URLParam(r, "member-uuid")
+
 		roomUUID, err := uuid.Parse(roomID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		memberUUID, err := uuid.Parse(memberID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -161,13 +156,13 @@ func AddChatMemberHandler(svc RoomMemberAdder, parser TokenParser) http.HandlerF
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		userUUID, _, err := parser.Parse(token)
+		_, _, err = parser.Parse(token)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		if err := svc.AddRoomMember(r.Context(), roomUUID, userUUID); err != nil {
+		if err := svc.AddRoomMember(r.Context(), roomUUID, memberUUID); err != nil {
 			if errors.Is(err, services.ErrRoomNotFound) {
 				w.WriteHeader(http.StatusNotFound)
 				return
@@ -180,23 +175,32 @@ func AddChatMemberHandler(svc RoomMemberAdder, parser TokenParser) http.HandlerF
 	}
 }
 
-// RemoveChatMemberHandler удаляет текущего пользователя из комнаты
+// RemoveChatMemberHandler удаляет пользователя из комнаты
 // @Summary Удаление пользователя из комнаты
-// @Description Удаляет текущего пользователя (из токена) из комнаты
+// @Description Удаляет указанного пользователя (member-uuid) из комнаты
 // @Tags Chat
 // @Accept plain
 // @Produce plain
 // @Param chat-uuid path string true "UUID комнаты"
+// @Param member-uuid path string true "UUID пользователя"
 // @Success 200 "Пользователь успешно удалён"
 // @Failure 400 "Некорректные данные запроса"
 // @Failure 401 "Неавторизован"
 // @Failure 404 "Комната или пользователь не найдены"
 // @Failure 500 "Внутренняя ошибка сервера"
-// @Router /chat/{chat-uuid}/member [delete]
+// @Router /chat/{chat-uuid}/{member-uuid} [delete]
 func RemoveChatMemberHandler(svc RoomMemberRemover, parser TokenParser) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		roomID := chi.URLParam(r, "chat-uuid")
+		memberID := chi.URLParam(r, "member-uuid")
+
 		roomUUID, err := uuid.Parse(roomID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		memberUUID, err := uuid.Parse(memberID)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -207,13 +211,13 @@ func RemoveChatMemberHandler(svc RoomMemberRemover, parser TokenParser) http.Han
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		userUUID, _, err := parser.Parse(token)
+		_, _, err = parser.Parse(token)
 		if err != nil {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 
-		if err := svc.RemoveRoomMember(r.Context(), roomUUID, userUUID); err != nil {
+		if err := svc.RemoveRoomMember(r.Context(), roomUUID, memberUUID); err != nil {
 			if errors.Is(err, services.ErrRoomNotFound) {
 				w.WriteHeader(http.StatusNotFound)
 				return

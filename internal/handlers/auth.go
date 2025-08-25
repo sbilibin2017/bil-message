@@ -11,7 +11,7 @@ import (
 )
 
 type Registerer interface {
-	Register(ctx context.Context, username string, password string) error
+	Register(ctx context.Context, username string, password string) (userUUID uuid.UUID, err error)
 }
 
 // RegisterRequest представляет JSON тело запроса на регистрацию.
@@ -53,7 +53,8 @@ func RegisterHandler(svc Registerer) http.HandlerFunc {
 			return
 		}
 
-		if err := svc.Register(r.Context(), req.Username, req.Password); err != nil {
+		userUUID, err := svc.Register(r.Context(), req.Username, req.Password)
+		if err != nil {
 			if errors.Is(err, services.ErrUsernameAlreadyExists) {
 				w.WriteHeader(http.StatusConflict)
 				return
@@ -63,6 +64,7 @@ func RegisterHandler(svc Registerer) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(userUUID.String()))
 	}
 }
 

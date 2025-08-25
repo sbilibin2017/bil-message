@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/google/uuid"
@@ -14,28 +15,32 @@ func Register(
 	client *resty.Client,
 	username string,
 	password string,
-) error {
-	// Подготавливаем JSON тело запроса
+) (userUUID uuid.UUID, err error) {
 	body := map[string]string{
 		"username": username,
 		"password": password,
 	}
 
-	// Отправка POST запроса на сервер
 	resp, err := client.R().
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(body).
 		Post("/auth/register")
 	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to send request: %w", err)
 	}
 
 	if resp.IsError() {
-		return fmt.Errorf("server returned error: %s", resp.Status())
+		return uuid.Nil, fmt.Errorf("server returned error: %s", resp.Status())
 	}
 
-	return nil
+	// Преобразуем строку из тела ответа в UUID
+	userUUID, err = uuid.Parse(strings.TrimSpace(resp.String()))
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("invalid user UUID returned: %w", err)
+	}
+
+	return userUUID, nil
 }
 
 // AddDevice отправляет запрос на регистрацию нового устройства для пользователя и возвращает UUID устройства.
@@ -63,8 +68,7 @@ func AddDevice(
 		return uuid.Nil, fmt.Errorf("server returned error: %s", resp.Status())
 	}
 
-	// Преобразуем строку в UUID
-	deviceUUID, err = uuid.Parse(resp.String())
+	deviceUUID, err = uuid.Parse(strings.TrimSpace(resp.String()))
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("invalid device UUID returned: %w", err)
 	}
@@ -103,6 +107,10 @@ func Login(
 	if token == "" {
 		return "", fmt.Errorf("no Authorization header returned")
 	}
+
+	// Убираем префикс "Bearer "
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimSpace(token)
 
 	return token, nil
 }

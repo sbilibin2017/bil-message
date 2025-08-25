@@ -1,0 +1,16 @@
+@startuml
+title Удаление комнаты (room_delete)
+
+actor Client
+participant Server
+
+Client -> Server: DELETE /chat/{chat_uuid} {JWT}
+
+Server -> Server: Проверка JWT
+Server -> Server: Проверка прав пользователя (владелец комнаты)
+Server -> Server: Удаление записи комнаты из таблицы room
+Server -> Server: Удаление участников из room_member
+Server -> Server: Удаление ключей комнаты (E2EE)
+
+Server --> Client: Подтверждение успешного удаления комнаты
+@enduml
