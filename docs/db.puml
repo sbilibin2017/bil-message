@@ -1,74 +1,53 @@
 @startuml
 skinparam linetype ortho
-skinparam packageStyle rectangle
 
-entity "users" as users {
-  * user_uuid : UUID
-  --
-  username : varchar
-  password_hash : text
-  created_at : timestamp
-  updated_at : timestamp
+class Users {
+  +user_uuid : UUID
+  username : TEXT
+  password : TEXT
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
 }
 
-entity "user_devices" as user_devices {
-  * device_uuid : UUID
-  --
+class Devices {
+  +device_uuid : UUID
   user_uuid : UUID
-  public_key : text
-  created_at : timestamp
-  updated_at : timestamp
+  device_name : TEXT
+  public_key : TEXT
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
 }
 
-entity "rooms" as rooms {
-  * room_uuid : UUID
-  --
-  name : varchar
-  creator_uuid : UUID
-  created_at : timestamp
-  updated_at : timestamp
+class Rooms {
+  +room_uuid : UUID
+  room_name : TEXT
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
 }
 
-entity "room_members" as room_members {
-  * room_uuid : UUID
-  * user_uuid : UUID
-  --
-  role : varchar
-  joined_at : timestamp
-  created_at : timestamp
-  updated_at : timestamp
-}
-
-entity "room_keys" as room_keys {
-  * room_uuid : UUID
-  * device_uuid : UUID
-  --
-  encrypted_key : text
-  created_at : timestamp
-  updated_at : timestamp
-}
-
-entity "room_messages" as room_messages {
-  * message_uuid : UUID
-  --
+class Messages {
+  +message_uuid : UUID
   room_uuid : UUID
-  sender_uuid : UUID
-  ciphertext : text
-  sent_at : timestamp
-  created_at : timestamp
-  updated_at : timestamp
+  sender_user_uuid : UUID
+  encrypted_content : BYTEA
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
 }
 
-' --- отношения ---
-users ||--o{ user_devices : "owns"
-users ||--o{ room_members : "joins"
-users ||--o{ room_messages : "sends"
-users ||--o{ rooms : "creates"
+class MessageKeys {
+  +message_key_uuid : UUID
+  message_uuid : UUID
+  device_uuid : UUID
+  encrypted_symmetric_key : BYTEA
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+}
 
-rooms ||--o{ room_members : "has"
-rooms ||--o{ room_keys : "encrypts"
-rooms ||--o{ room_messages : "contains"
-
-user_devices ||--o{ room_keys : "stores"
+' Отношения
+Users "1" --> "0..*" Devices : has devices
+Rooms "1" --> "0..*" Messages : contains messages
+Users "1" --> "0..*" Messages : sends messages
+Messages "1" --> "0..*" MessageKeys : has keys
+Devices "1" --> "0..*" MessageKeys : can read keys
 
 @enduml
