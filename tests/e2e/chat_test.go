@@ -20,6 +20,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/gorilla/websocket"
 )
 
 type ChatSuite struct {
@@ -217,7 +219,7 @@ func (s *ChatSuite) TearDownSuite() {
 	log.Println("[TearDownSuite] Завершение выполнено")
 }
 
-// Полный жизненный цикл чата
+// Полный жизненный цикл чата (CRUD)
 func (s *ChatSuite) TestChatLifecycle() {
 	clientAddr := fmt.Sprintf("http://localhost%s/api/v1", s.address)
 
@@ -238,7 +240,7 @@ func (s *ChatSuite) TestChatLifecycle() {
 	cmd := exec.Command(s.clientPath, "add-member",
 		"--address", clientAddr,
 		"--token", s.token1,
-		"--chat-uuid", roomID,
+		"--room-uuid", roomID,
 		"--member-uuid", s.userUUID2,
 	)
 	out, err = cmd.CombinedOutput()
@@ -251,7 +253,7 @@ func (s *ChatSuite) TestChatLifecycle() {
 	cmd = exec.Command(s.clientPath, "remove-member",
 		"--address", clientAddr,
 		"--token", s.token1,
-		"--chat-uuid", roomID,
+		"--room-uuid", roomID,
 		"--member-uuid", s.userUUID2,
 	)
 	out, err = cmd.CombinedOutput()
@@ -264,12 +266,84 @@ func (s *ChatSuite) TestChatLifecycle() {
 	cmd = exec.Command(s.clientPath, "remove",
 		"--address", clientAddr,
 		"--token", s.token1,
-		"--chat-uuid", roomID,
+		"--room-uuid", roomID,
 	)
 	out, err = cmd.CombinedOutput()
 	log.Printf("[TestChatLifecycle] remove output: %q", string(out))
 	s.Require().NoError(err)
 	log.Println("[TestChatLifecycle] Комната удалена")
+}
+
+// Тест обмена сообщениями между двумя пользователями через WebSocket
+func (s *ChatSuite) TestMessaging() {
+	clientAddr := fmt.Sprintf("http://localhost%s/api/v1", s.address)
+
+	// Создание комнаты
+	log.Println("[TestMessaging] Создание комнаты...")
+	out, err := exec.Command(s.clientPath, "create",
+		"--address", clientAddr,
+		"--token", s.token1,
+	).CombinedOutput()
+	s.Require().NoError(err, string(out))
+	roomID := strings.TrimSpace(string(out))
+	s.Require().NotEmpty(roomID)
+	log.Printf("[TestMessaging] Комната создана: %s", roomID)
+
+	// Добавление второго пользователя
+	log.Println("[TestMessaging] Добавление второго пользователя...")
+	_, err = exec.Command(s.clientPath, "add-member",
+		"--address", clientAddr,
+		"--token", s.token1,
+		"--room-uuid", roomID,
+		"--member-uuid", s.userUUID2,
+	).CombinedOutput()
+	s.Require().NoError(err)
+
+	// WebSocket URL
+	wsURL := fmt.Sprintf("ws://localhost%s/api/v1/chat/%s/ws", s.address, roomID)
+
+	// Подключение первого пользователя
+	log.Println("[TestMessaging] Подключение первого пользователя...")
+	header1 := map[string][]string{
+		"Authorization": {fmt.Sprintf("Bearer %s", s.token1)},
+	}
+	conn1, _, err := websocket.DefaultDialer.Dial(wsURL, header1)
+	s.Require().NoError(err)
+	defer conn1.Close()
+
+	// Подключение второго пользователя
+	log.Println("[TestMessaging] Подключение второго пользователя...")
+	header2 := map[string][]string{
+		"Authorization": {fmt.Sprintf("Bearer %s", s.token2)},
+	}
+	conn2, _, err := websocket.DefaultDialer.Dial(wsURL, header2)
+	s.Require().NoError(err)
+	defer conn2.Close()
+
+	// Канал для чтения сообщений от второго пользователя
+	msgCh := make(chan string, 1)
+	go func() {
+		_, msg, err := conn2.ReadMessage()
+		if err != nil {
+			log.Printf("[TestMessaging] Ошибка чтения WS: %v", err)
+			return
+		}
+		msgCh <- string(msg)
+	}()
+
+	// Первый отправляет сообщение
+	expected := "Hello from user1!"
+	err = conn1.WriteMessage(websocket.TextMessage, []byte(expected))
+	s.Require().NoError(err)
+
+	// Проверка получения сообщения
+	select {
+	case received := <-msgCh:
+		log.Printf("[TestMessaging] Второй получил: %q", received)
+		s.Require().Equal(expected, received)
+	case <-time.After(5 * time.Second):
+		s.T().Fatal("таймаут: второй пользователь не получил сообщение")
+	}
 }
 
 func TestChatSuite(t *testing.T) {

@@ -38,6 +38,7 @@ func run() error {
 		newRemoveChatCommand(),
 		newAddChatMemberCommand(),
 		newRemoveChatMemberCommand(),
+		newWebSocketCommand(),
 	)
 	return cmd.Execute()
 }
@@ -47,7 +48,8 @@ func newRootCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "bil-message-client",
 		Short: "CLI клиент для bil-message",
-		Long:  "CLI клиент для взаимодействия с сервером bil-message: регистрация, управление устройствами и вход в аккаунт.",
+		Long: `CLI клиент для взаимодействия с сервером bil-message:
+регистрация, управление устройствами, вход в аккаунт и работа с чатами.`,
 	}
 }
 
@@ -58,7 +60,7 @@ func newRegisterCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "register",
 		Short:   "Регистрация нового пользователя",
-		Example: "bil-message-client register --username testuser --password secret --address http://localhost:8080",
+		Example: "bil-message-client register -a http://localhost:8080 -u testuser -p secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address, http.WithRetryPolicy(http.RetryPolicy{
@@ -94,7 +96,7 @@ func newDeviceCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "device",
 		Short:   "Добавление нового устройства для пользователя",
-		Example: "bil-message-client device --username testuser --password secret --public-key key123 --address http://localhost:8080",
+		Example: "bil-message-client device -a http://localhost:8080 -u testuser -p secret -k myPublicKey",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address, http.WithRetryPolicy(http.RetryPolicy{
@@ -140,7 +142,7 @@ func newLoginCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "login",
 		Short:   "Вход пользователя",
-		Example: "bil-message-client login --username testuser --password secret --address http://localhost:8080",
+		Example: "bil-message-client login -a http://localhost:8080 -u testuser -p secret",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address, http.WithRetryPolicy(http.RetryPolicy{
@@ -201,8 +203,9 @@ func newCreateChatCommand() *cobra.Command {
 	var address, token string
 
 	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Создать новую комнату",
+		Use:     "create",
+		Short:   "Создать новую комнату",
+		Example: "bil-message-client create -a http://localhost:8080 -t <jwt-token>",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address)
@@ -229,11 +232,12 @@ func newCreateChatCommand() *cobra.Command {
 
 // Удаление комнаты
 func newRemoveChatCommand() *cobra.Command {
-	var address, token, chatUUID string
+	var address, token, roomUUID string
 
 	cmd := &cobra.Command{
-		Use:   "remove",
-		Short: "Удалить комнату",
+		Use:     "remove",
+		Short:   "Удалить комнату",
+		Example: "bil-message-client remove -a http://localhost:8080 -t <jwt-token> -c <room-uuid>",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address)
@@ -241,7 +245,7 @@ func newRemoveChatCommand() *cobra.Command {
 				return err
 			}
 
-			uuidRoom, err := uuid.Parse(chatUUID)
+			uuidRoom, err := uuid.Parse(roomUUID)
 			if err != nil {
 				return fmt.Errorf("некорректный UUID комнаты: %w", err)
 			}
@@ -257,20 +261,21 @@ func newRemoveChatCommand() *cobra.Command {
 
 	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
 	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
-	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+	cmd.Flags().StringVarP(&roomUUID, "room-uuid", "c", "", "UUID комнаты")
 	cmd.MarkFlagRequired("token")
-	cmd.MarkFlagRequired("chat-uuid")
+	cmd.MarkFlagRequired("room-uuid")
 
 	return cmd
 }
 
 // Добавление пользователя в комнату
 func newAddChatMemberCommand() *cobra.Command {
-	var address, token, chatUUID, memberUUID string
+	var address, token, roomUUID, memberUUID string
 
 	cmd := &cobra.Command{
-		Use:   "add-member",
-		Short: "Добавить пользователя в комнату",
+		Use:     "add-member",
+		Short:   "Добавить пользователя в комнату",
+		Example: "bil-message-client add-member -a http://localhost:8080 -t <jwt-token> -c <room-uuid> -m <user-uuid>",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address)
@@ -278,7 +283,7 @@ func newAddChatMemberCommand() *cobra.Command {
 				return err
 			}
 
-			uuidRoom, err := uuid.Parse(chatUUID)
+			uuidRoom, err := uuid.Parse(roomUUID)
 			if err != nil {
 				return fmt.Errorf("некорректный UUID комнаты: %w", err)
 			}
@@ -299,10 +304,10 @@ func newAddChatMemberCommand() *cobra.Command {
 
 	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
 	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
-	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+	cmd.Flags().StringVarP(&roomUUID, "room-uuid", "c", "", "UUID комнаты")
 	cmd.Flags().StringVarP(&memberUUID, "member-uuid", "m", "", "UUID пользователя для добавления")
 	cmd.MarkFlagRequired("token")
-	cmd.MarkFlagRequired("chat-uuid")
+	cmd.MarkFlagRequired("room-uuid")
 	cmd.MarkFlagRequired("member-uuid")
 
 	return cmd
@@ -310,11 +315,12 @@ func newAddChatMemberCommand() *cobra.Command {
 
 // Удаление пользователя из комнаты
 func newRemoveChatMemberCommand() *cobra.Command {
-	var address, token, chatUUID, memberUUID string
+	var address, token, roomUUID, memberUUID string
 
 	cmd := &cobra.Command{
-		Use:   "remove-member",
-		Short: "Удалить пользователя из комнаты",
+		Use:     "remove-member",
+		Short:   "Удалить пользователя из комнаты",
+		Example: "bil-message-client remove-member -a http://localhost:8080 -t <jwt-token> -c <room-uuid> -m <user-uuid>",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := context.Background()
 			httpClient, err := http.New(address)
@@ -322,7 +328,7 @@ func newRemoveChatMemberCommand() *cobra.Command {
 				return err
 			}
 
-			uuidRoom, err := uuid.Parse(chatUUID)
+			uuidRoom, err := uuid.Parse(roomUUID)
 			if err != nil {
 				return fmt.Errorf("некорректный UUID комнаты: %w", err)
 			}
@@ -343,11 +349,33 @@ func newRemoveChatMemberCommand() *cobra.Command {
 
 	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
 	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
-	cmd.Flags().StringVarP(&chatUUID, "chat-uuid", "c", "", "UUID комнаты")
+	cmd.Flags().StringVarP(&roomUUID, "room-uuid", "c", "", "UUID комнаты")
 	cmd.Flags().StringVarP(&memberUUID, "member-uuid", "m", "", "UUID пользователя для удаления")
 	cmd.MarkFlagRequired("token")
-	cmd.MarkFlagRequired("chat-uuid")
+	cmd.MarkFlagRequired("room-uuid")
 	cmd.MarkFlagRequired("member-uuid")
+
+	return cmd
+}
+
+// newWebSocketCommand создаёт команду для подключения к WebSocket чата
+func newWebSocketCommand() *cobra.Command {
+	var address, token, roomUUID string
+
+	cmd := &cobra.Command{
+		Use:     "ws",
+		Short:   "Подключиться к WebSocket чата",
+		Example: "bil-message-client ws -a http://localhost:8080 -t <jwt-token> -c <room-uuid>",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return client.ConnectWebSocket(fmt.Sprintf("%s/chat/%s/ws", address, roomUUID), token)
+		},
+	}
+
+	cmd.Flags().StringVarP(&address, "address", "a", "http://localhost:8080", "Адрес сервера")
+	cmd.Flags().StringVarP(&token, "token", "t", "", "JWT токен авторизации")
+	cmd.Flags().StringVarP(&roomUUID, "room-uuid", "c", "", "UUID комнаты")
+	cmd.MarkFlagRequired("token")
+	cmd.MarkFlagRequired("room-uuid")
 
 	return cmd
 }

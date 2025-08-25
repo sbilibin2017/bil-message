@@ -4,9 +4,13 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	"github.com/sbilibin2017/bil-message/internal/chat"
+	"github.com/sbilibin2017/bil-message/internal/jwt"
 	"github.com/sbilibin2017/bil-message/internal/services"
 )
 
@@ -79,16 +83,16 @@ func CreateChatHandler(svc RoomCreator, parser TokenParser) http.HandlerFunc {
 // @Tags Chat
 // @Accept plain
 // @Produce plain
-// @Param chat-uuid path string true "UUID комнаты"
+// @Param room-uuid path string true "UUID комнаты"
 // @Success 200 "Комната успешно удалена"
 // @Failure 400 "Некорректные данные запроса"
 // @Failure 401 "Неавторизован"
 // @Failure 404 "Комната не найдена"
 // @Failure 500 "Внутренняя ошибка сервера"
-// @Router /chat/{chat-uuid} [delete]
+// @Router /chat/{room-uuid} [delete]
 func RemoveChatHandler(svc RoomRemover, parser TokenParser) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		roomID := chi.URLParam(r, "chat-uuid")
+		roomID := chi.URLParam(r, "room-uuid")
 
 		roomUUID, err := uuid.Parse(roomID)
 		if err != nil {
@@ -126,17 +130,17 @@ func RemoveChatHandler(svc RoomRemover, parser TokenParser) http.HandlerFunc {
 // @Tags Chat
 // @Accept plain
 // @Produce plain
-// @Param chat-uuid path string true "UUID комнаты"
+// @Param room-uuid path string true "UUID комнаты"
 // @Param member-uuid path string true "UUID пользователя"
 // @Success 200 "Пользователь успешно добавлен"
 // @Failure 400 "Некорректные данные запроса"
 // @Failure 401 "Неавторизован"
 // @Failure 404 "Комната не найдена"
 // @Failure 500 "Внутренняя ошибка сервера"
-// @Router /chat/{chat-uuid}/{member-uuid} [post]
+// @Router /chat/{room-uuid}/{member-uuid} [post]
 func AddChatMemberHandler(svc RoomMemberAdder, parser TokenParser) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		roomID := chi.URLParam(r, "chat-uuid")
+		roomID := chi.URLParam(r, "room-uuid")
 		memberID := chi.URLParam(r, "member-uuid")
 
 		roomUUID, err := uuid.Parse(roomID)
@@ -181,17 +185,17 @@ func AddChatMemberHandler(svc RoomMemberAdder, parser TokenParser) http.HandlerF
 // @Tags Chat
 // @Accept plain
 // @Produce plain
-// @Param chat-uuid path string true "UUID комнаты"
+// @Param room-uuid path string true "UUID комнаты"
 // @Param member-uuid path string true "UUID пользователя"
 // @Success 200 "Пользователь успешно удалён"
 // @Failure 400 "Некорректные данные запроса"
 // @Failure 401 "Неавторизован"
 // @Failure 404 "Комната или пользователь не найдены"
 // @Failure 500 "Внутренняя ошибка сервера"
-// @Router /chat/{chat-uuid}/{member-uuid} [delete]
+// @Router /chat/{room-uuid}/{member-uuid} [delete]
 func RemoveChatMemberHandler(svc RoomMemberRemover, parser TokenParser) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		roomID := chi.URLParam(r, "chat-uuid")
+		roomID := chi.URLParam(r, "room-uuid")
 		memberID := chi.URLParam(r, "member-uuid")
 
 		roomUUID, err := uuid.Parse(roomID)
@@ -227,5 +231,88 @@ func RemoveChatMemberHandler(svc RoomMemberRemover, parser TokenParser) http.Han
 		}
 
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+// ChatWebSocketHandler возвращает http.HandlerFunc для WebSocket соединений.
+//
+// Подключение по WebSocket осуществляется по пути /chat/ws/{room-uuid}.
+// Пользователь должен быть авторизован и передать валидный токен в заголовке Authorization.
+//
+// После подключения клиент создается и добавляется в комнату.
+// Если комната с заданным UUID не существует, она создается автоматически.
+//
+// Чтение и запись сообщений происходят асинхронно через ReadPump и WritePump.
+//
+// @Summary WebSocket соединение для чата
+// @Description Создает WebSocket соединение для конкретной комнаты. Сообщения рассылаются всем участникам, кроме отправителя.
+// @Tags Chat
+// @Accept plain
+// @Produce json
+// @Param room-uuid path string true "UUID комнаты"
+// @Success 101 "WebSocket соединение установлено"
+// @Failure 400 "Некорректный UUID комнаты"
+// @Failure 401 "Неавторизован"
+// @Failure 500 "Ошибка сервера при апгрейде соединения"
+// @Router /chat/{room-uuid}/ws [get]
+func ChatWebSocketHandler(
+	newClient func(conn *websocket.Conn, userUUID, roomUUID uuid.UUID) *chat.ChatClient,
+	newRoom func(roomUUID uuid.UUID) *chat.ChatRoom,
+	parser *jwt.JWT,
+) http.HandlerFunc {
+
+	rooms := make(map[uuid.UUID]*chat.ChatRoom)
+	var mu sync.Mutex
+
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Получаем UUID комнаты из URL
+		roomIDStr := chi.URLParam(r, "room-uuid")
+		roomUUID, err := uuid.Parse(roomIDStr)
+		if err != nil {
+			http.Error(w, "invalid room UUID", http.StatusBadRequest)
+			return
+		}
+
+		// Получаем токен из запроса
+		token, err := parser.GetFromRequest(r)
+		if err != nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Парсим токен
+		userUUID, _, err := parser.Parse(token)
+		if err != nil {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		// Апгрейдим соединение в WebSocket
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			http.Error(w, "failed to upgrade websocket", http.StatusInternalServerError)
+			return
+		}
+
+		client := newClient(conn, userUUID, roomUUID)
+
+		// Получаем или создаём комнату
+		mu.Lock()
+		room, ok := rooms[roomUUID]
+		if !ok {
+			room = newRoom(roomUUID)
+			rooms[roomUUID] = room
+		}
+		mu.Unlock()
+
+		room.AddClient(client)
+
+		// Запускаем неблокирующие горутины для чтения и записи
+		client.ReadPump(room)
+		client.WritePump()
 	}
 }

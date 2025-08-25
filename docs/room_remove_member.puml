@@ -4,7 +4,7 @@ title Удаление пользователя из комнаты
 actor Client
 participant Server
 
-Client -> Server: DELETE /chat/{chat-uuid}/{member-uuid} {JWT}
+Client -> Server: DELETE /chat/{room-uuid}/{member-uuid} {JWT}
 
 Server -> Server: Проверка JWT
 Server -> Server: Парсинг token, получение userUUID

@@ -164,7 +164,42 @@ const docTemplate = `{
                 }
             }
         },
-        "/chat/{chat-uuid}": {
+        "/chat/ws/{room-uuid}": {
+            "get": {
+                "description": "Создает WebSocket соединение для конкретной комнаты. Сообщения рассылаются всем участникам, кроме отправителя.",
+                "consumes": [
+                    "text/plain"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Chat"
+                ],
+                "summary": "WebSocket соединение для чата",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "UUID комнаты",
+                        "name": "room-uuid",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "WebSocket соединение установлено"
+                    },
+                    "400": {
+                        "description": "Некорректный UUID комнаты"
+                    },
+                    "401": {
+                        "description": "Неавторизован"
+                    }
+                }
+            }
+        },
+        "/chat/{room-uuid}": {
             "delete": {
                 "description": "Удаляет комнату по UUID",
                 "consumes": [
@@ -181,7 +216,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "UUID комнаты",
-                        "name": "chat-uuid",
+                        "name": "room-uuid",
                         "in": "path",
                         "required": true
                     }
@@ -205,7 +240,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/chat/{chat-uuid}/{member-uuid}": {
+        "/chat/{room-uuid}/{member-uuid}": {
             "post": {
                 "description": "Добавляет указанного пользователя (member-uuid) в комнату",
                 "consumes": [
@@ -222,7 +257,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "UUID комнаты",
-                        "name": "chat-uuid",
+                        "name": "room-uuid",
                         "in": "path",
                         "required": true
                     },
@@ -268,7 +303,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "UUID комнаты",
-                        "name": "chat-uuid",
+                        "name": "room-uuid",
                         "in": "path",
                         "required": true
                     },

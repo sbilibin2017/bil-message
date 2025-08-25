@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	"github.com/sbilibin2017/bil-message/internal/chat"
 	"github.com/sbilibin2017/bil-message/internal/db"
 	"github.com/sbilibin2017/bil-message/internal/handlers"
 	"github.com/sbilibin2017/bil-message/internal/jwt"
@@ -129,9 +130,14 @@ func run(ctx context.Context) error {
 
 		r.Route("/chat", func(r chi.Router) {
 			r.Post("/", handlers.CreateChatHandler(chatService, jwt))
-			r.Delete("/{chat-uuid}", handlers.RemoveChatHandler(chatService, jwt))
-			r.Post("/{chat-uuid}/{member-uuid}", handlers.AddChatMemberHandler(chatService, jwt))
-			r.Delete("/{chat-uuid}/{member-uuid}", handlers.RemoveChatMemberHandler(chatService, jwt))
+			r.Delete("/{room-uuid}", handlers.RemoveChatHandler(chatService, jwt))
+			r.Post("/{room-uuid}/{member-uuid}", handlers.AddChatMemberHandler(chatService, jwt))
+			r.Delete("/{room-uuid}/{member-uuid}", handlers.RemoveChatMemberHandler(chatService, jwt))
+			r.Get("/{room-uuid}/ws", handlers.ChatWebSocketHandler(
+				chat.NewChatClient,
+				chat.NewChatRoom,
+				jwt,
+			))
 		})
 	})
 

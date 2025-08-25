@@ -5,12 +5,17 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	"github.com/sbilibin2017/bil-message/internal/chat"
+	"github.com/sbilibin2017/bil-message/internal/jwt"
 	"github.com/sbilibin2017/bil-message/internal/services"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCreateChatHandler(t *testing.T) {
@@ -152,7 +157,7 @@ func TestRemoveChatHandler(t *testing.T) {
 			tt.setup()
 
 			r := chi.NewRouter()
-			r.Delete("/chat/{chat-uuid}", RemoveChatHandler(mockSvc, mockParser))
+			r.Delete("/chat/{room-uuid}", RemoveChatHandler(mockSvc, mockParser))
 
 			req := httptest.NewRequest("DELETE", "/chat/"+tt.roomID, nil)
 			w := httptest.NewRecorder()
@@ -253,7 +258,7 @@ func TestAddChatMemberHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup()
 			r := chi.NewRouter()
-			r.Post("/chat/{chat-uuid}/{member-uuid}", AddChatMemberHandler(mockSvc, mockParser))
+			r.Post("/chat/{room-uuid}/{member-uuid}", AddChatMemberHandler(mockSvc, mockParser))
 
 			req := httptest.NewRequest("POST", "/chat/"+tt.roomID+"/"+tt.memberID, nil)
 			w := httptest.NewRecorder()
@@ -353,7 +358,7 @@ func TestRemoveChatMemberHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tt.setup()
 			r := chi.NewRouter()
-			r.Delete("/chat/{chat-uuid}/{member-uuid}", RemoveChatMemberHandler(mockSvc, mockParser))
+			r.Delete("/chat/{room-uuid}/{member-uuid}", RemoveChatMemberHandler(mockSvc, mockParser))
 
 			req := httptest.NewRequest("DELETE", "/chat/"+tt.roomID+"/"+tt.memberID, nil)
 			w := httptest.NewRecorder()
@@ -362,4 +367,50 @@ func TestRemoveChatMemberHandler(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, w.Result().StatusCode)
 		})
 	}
+}
+
+func TestChatWebSocketHandlerWithJWT(t *testing.T) {
+	// JWT
+	j, err := jwt.New()
+	require.NoError(t, err)
+
+	userUUID := uuid.New()
+	deviceUUID := uuid.New()
+	token, err := j.Generate(userUUID, deviceUUID)
+	require.NoError(t, err)
+
+	roomUUID := uuid.New()
+
+	// chi router
+	r := chi.NewRouter()
+	r.Get("/chat/ws/{room-uuid}", ChatWebSocketHandler(
+		func(conn *websocket.Conn, userUUID, roomUUID uuid.UUID) *chat.ChatClient {
+			return chat.NewChatClient(conn, userUUID, roomUUID)
+		},
+		func(roomUUID uuid.UUID) *chat.ChatRoom {
+			return chat.NewChatRoom(roomUUID)
+		},
+		j,
+	))
+
+	server := httptest.NewServer(r)
+	defer server.Close()
+
+	// Convert http:// to ws://
+	wsURL := "ws" + server.URL[len("http"):] + "/chat/ws/" + roomUUID.String()
+
+	header := make(map[string][]string)
+	header["Authorization"] = []string{"Bearer " + token}
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, header)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	// Send and receive message
+	testMsg := []byte("hello")
+	require.NoError(t, conn.WriteMessage(websocket.TextMessage, testMsg))
+
+	conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	_, _, err = conn.ReadMessage()
+	require.Error(t, err) // no other clients yet, timeout expected
 }
