@@ -177,9 +177,9 @@ func TestNewWebsocketHandler(t *testing.T) {
 	require.NoError(t, err)
 	defer ws.Close()
 
-	// Отправляем сообщение
+	// Отправляем сообщение как "сырой" текст
 	testText := "hello websocket"
-	err = ws.WriteJSON(map[string]string{"message": testText})
+	err = ws.WriteMessage(websocket.TextMessage, []byte(testText))
 	require.NoError(t, err)
 
 	// Проверяем, что сообщение пришло через NATS

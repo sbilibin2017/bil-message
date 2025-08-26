@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/sbilibin2017/bil-message/internal/client"
+	"github.com/sbilibin2017/bil-message/internal/models"
 )
 
 // Build info, set via -ldflags
@@ -120,6 +124,54 @@ func main() {
 		mUUID, _ := uuid.Parse(memberUUID)
 		if err := roomClient.RemoveMember(ctx, token, rUUID, mUUID); err != nil {
 			log.Fatalf("Remove member failed: %v", err)
+		}
+
+	case "room-connect":
+		rUUID, err := uuid.Parse(roomUUID)
+		if err != nil {
+			log.Fatalf("Invalid room UUID: %v", err)
+		}
+
+		// Формируем URL для WebSocket
+		wsURL := fmt.Sprintf("ws://%s/room/%s/ws", serverURL[len("http://"):], rUUID.String())
+
+		header := http.Header{}
+		header.Set("Authorization", "Bearer "+token)
+
+		dialer := websocket.DefaultDialer
+		conn, _, err := dialer.Dial(wsURL, header)
+		if err != nil {
+			log.Fatalf("Failed to connect to room WebSocket: %v", err)
+		}
+		defer conn.Close()
+		log.Println("Connected to room WebSocket. Type messages and press Enter to send.")
+
+		// Чтение входящих сообщений в отдельной горутине
+		go func() {
+			for {
+				var msg models.RoomMessage
+				if err := conn.ReadJSON(&msg); err != nil {
+					log.Println("WebSocket read error:", err)
+					return
+				}
+				log.Printf("[%s] %s\n", msg.UserUUID, msg.Message)
+			}
+		}()
+
+		// Чтение сообщений с stdin и отправка plain text
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			text := scanner.Text()
+			if text == "" {
+				continue
+			}
+
+			if err := conn.WriteMessage(websocket.TextMessage, []byte(text)); err != nil {
+				log.Println("Failed to send message:", err)
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			log.Println("Error reading input:", err)
 		}
 
 	default:

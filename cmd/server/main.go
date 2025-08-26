@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/nats-io/nats.go"
 	"github.com/sbilibin2017/bil-message/internal/db"
@@ -149,6 +150,10 @@ func run(
 
 	// Chi роутер
 	r := chi.NewRouter()
+
+	// Middleware
+	r.Use(middleware.Recoverer)
+	r.Use(middleware.Logger)
 
 	// Группа роутов: /{version}
 	r.Route(version, func(r chi.Router) {

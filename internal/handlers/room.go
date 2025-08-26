@@ -286,18 +286,16 @@ func NewRoomWebsocketHandler(tokenParser TokenParser, nc *nats.Conn) http.Handle
 		defer conn.Close()
 
 		for {
-			var msg struct {
-				Message string `json:"message"`
-			}
-
-			if err := conn.ReadJSON(&msg); err != nil {
+			// читаем "сырой" текст из вебсокета
+			_, message, err := conn.ReadMessage()
+			if err != nil {
 				break
 			}
 
 			chatMsg := models.RoomMessage{
 				RoomUUID:  roomUUID,
 				UserUUID:  userUUID,
-				Message:   msg.Message,
+				Message:   string(message),
 				Timestamp: time.Now().Unix(),
 			}
 
