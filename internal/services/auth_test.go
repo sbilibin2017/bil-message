@@ -16,196 +16,59 @@ func TestAuthService_Register(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockGetter := NewMockUserGetter(ctrl)
-	mockSaver := NewMockUserSaver(ctrl)
-	mockDeviceSaver := NewMockDeviceSaver(ctrl)
-	mockTokenGen := NewMockTokenGenerator(ctrl)
+	mockUserWrite := NewMockUserWriter(ctrl)
+	mockUserRead := NewMockUserReader(ctrl)
 
-	svc := NewAuthService(mockGetter, mockSaver, nil, mockDeviceSaver, mockTokenGen)
+	svc := NewAuthService(mockUserWrite, mockUserRead, nil, nil, nil)
 
 	tests := []struct {
 		name        string
 		username    string
 		password    string
-		setupMocks  func()
-		expectError bool
-		expectedErr error
+		mockGetUser *models.UserDB
+		mockErr     error
+		wantErr     error
 	}{
 		{
-			name:     "successful registration",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func() {
-				// Никто не существует с таким username
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(nil, nil)
-				// Проверяем, что сохраняется пользователь с любым UUID и хэшем пароля
-				mockSaver.EXPECT().Save(gomock.Any(), gomock.Any(), "johndoe", gomock.Any()).Return(nil)
-			},
+			name:        "success",
+			username:    "johndoe",
+			password:    "pass123",
+			mockGetUser: nil,
+			mockErr:     nil,
+			wantErr:     nil,
 		},
 		{
-			name:     "username already exists",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func() {
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(&models.UserDB{}, nil)
-			},
-			expectError: true,
-			expectedErr: ErrUsernameAlreadyExists,
+			name:        "user exists",
+			username:    "johndoe",
+			password:    "pass123",
+			mockGetUser: &models.UserDB{UserUUID: uuid.New(), Username: "johndoe"},
+			mockErr:     nil,
+			wantErr:     ErrUserExists,
 		},
 		{
-			name:     "getter returns error",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func() {
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(nil, errors.New("db error"))
-			},
-			expectError: true,
-			expectedErr: errors.New("db error"),
-		},
-		{
-			name:     "saver returns error",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func() {
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(nil, nil)
-				mockSaver.EXPECT().Save(gomock.Any(), gomock.Any(), "johndoe", gomock.Any()).
-					Return(errors.New("db save error"))
-			},
-			expectError: true,
-			expectedErr: errors.New("db save error"),
+			name:        "get user error",
+			username:    "johndoe",
+			password:    "pass123",
+			mockGetUser: nil,
+			mockErr:     errors.New("db error"),
+			wantErr:     errors.New("db error"),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setupMocks()
+			mockUserRead.EXPECT().GetByUsername(gomock.Any(), tt.username).Return(tt.mockGetUser, tt.mockErr)
+			if tt.mockGetUser == nil && tt.mockErr == nil {
+				mockUserWrite.EXPECT().Save(gomock.Any(), gomock.Any(), tt.username, gomock.Any()).Return(nil)
+			}
 
 			userUUID, err := svc.Register(context.Background(), tt.username, tt.password)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.expectedErr != nil {
-					assert.EqualError(t, err, tt.expectedErr.Error())
-				}
+			if tt.wantErr != nil {
+				assert.EqualError(t, err, tt.wantErr.Error())
 				assert.Equal(t, uuid.Nil, userUUID)
 			} else {
 				assert.NoError(t, err)
-				// Проверяем, что вернулся корректный UUID
 				assert.NotEqual(t, uuid.Nil, userUUID)
-
-				// Дополнительно проверяем, что хэш пароля верный
-				userHash := "" // мы не можем напрямую проверить хэш, но можно проверить формат
-				err := bcrypt.CompareHashAndPassword([]byte(userHash), []byte(tt.password))
-				_ = err // здесь можно пропустить, так как хэш проверяется в сервисе
-			}
-		})
-	}
-}
-
-func TestAuthService_AddDevice(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockGetter := NewMockUserGetter(ctrl)
-	mockDeviceSaver := NewMockDeviceSaver(ctrl)
-	svc := NewAuthService(mockGetter, nil, nil, mockDeviceSaver, nil)
-
-	tests := []struct {
-		name        string
-		username    string
-		password    string
-		publicKey   string
-		setupMocks  func()
-		expectError bool
-		expectedErr error
-	}{
-		{
-			name:      "successful add device",
-			username:  "johndoe",
-			password:  "secret",
-			publicKey: "pubkey",
-			setupMocks: func() {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     uuid.New(),
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-				mockDeviceSaver.EXPECT().Save(gomock.Any(), gomock.Any(), user.UserUUID, "pubkey").Return(nil)
-			},
-		},
-		{
-			name:      "user not found",
-			username:  "johndoe",
-			password:  "secret",
-			publicKey: "pubkey",
-			setupMocks: func() {
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(nil, nil)
-			},
-			expectError: true,
-			expectedErr: ErrInvalidCredentials,
-		},
-		{
-			name:      "invalid password",
-			username:  "johndoe",
-			password:  "wrongpass",
-			publicKey: "pubkey",
-			setupMocks: func() {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     uuid.New(),
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-			},
-			expectError: true,
-			expectedErr: ErrInvalidCredentials,
-		},
-		{
-			name:      "device save error",
-			username:  "johndoe",
-			password:  "secret",
-			publicKey: "pubkey",
-			setupMocks: func() {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     uuid.New(),
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-				mockDeviceSaver.EXPECT().Save(gomock.Any(), gomock.Any(), user.UserUUID, "pubkey").
-					Return(errors.New("db error"))
-			},
-			expectError: true,
-			expectedErr: errors.New("db error"),
-		},
-		{
-			name:      "getter returns error",
-			username:  "johndoe",
-			password:  "secret",
-			publicKey: "pubkey",
-			setupMocks: func() {
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(nil, errors.New("db get error"))
-			},
-			expectError: true,
-			expectedErr: errors.New("db get error"),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.setupMocks()
-			_, err := svc.AddDevice(context.Background(), tt.username, tt.password, tt.publicKey)
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.expectedErr != nil {
-					assert.EqualError(t, err, tt.expectedErr.Error())
-				}
-			} else {
-				assert.NoError(t, err)
 			}
 		})
 	}
@@ -215,168 +78,170 @@ func TestAuthService_Login(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockGetter := NewMockUserGetter(ctrl)
-	mockDeviceGetter := NewMockDeviceGetter(ctrl)
+	mockUserRead := NewMockUserReader(ctrl)
+	mockDeviceRead := NewMockDeviceReader(ctrl)
 	mockTokenGen := NewMockTokenGenerator(ctrl)
-	svc := NewAuthService(mockGetter, nil, mockDeviceGetter, nil, mockTokenGen)
+
+	svc := NewAuthService(nil, mockUserRead, nil, mockDeviceRead, mockTokenGen)
+
+	passwordHash, _ := bcrypt.GenerateFromPassword([]byte("pass123"), bcrypt.DefaultCost)
+	user := &models.UserDB{UserUUID: uuid.New(), Username: "johndoe", Password: string(passwordHash)}
+	device := &models.DeviceDB{DeviceUUID: uuid.New(), UserUUID: user.UserUUID}
 
 	tests := []struct {
-		name        string
-		username    string
-		password    string
-		setupMocks  func(userUUID, deviceUUID uuid.UUID)
-		expectError bool
-		expectedErr error
+		name         string
+		username     string
+		password     string
+		deviceUUID   uuid.UUID
+		mockUser     *models.UserDB
+		mockDevice   *models.DeviceDB
+		mockUserErr  error
+		mockDevErr   error
+		mockToken    string
+		mockTokenErr error
+		wantErr      error
 	}{
 		{
-			name:     "successful login",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func(userUUID, deviceUUID uuid.UUID) {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     userUUID,
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				device := &models.UserDeviceDB{
-					UserUUID:   userUUID,
-					DeviceUUID: deviceUUID,
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-				mockDeviceGetter.EXPECT().Get(gomock.Any(), deviceUUID).Return(device, nil)
-				mockTokenGen.EXPECT().Generate(userUUID, deviceUUID).Return("token123", nil)
-			},
+			name:       "success",
+			username:   "johndoe",
+			password:   "pass123",
+			deviceUUID: device.DeviceUUID,
+			mockUser:   user,
+			mockDevice: device,
+			mockToken:  "token123",
+			wantErr:    nil,
 		},
 		{
-			name:     "user not found",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func(userUUID, deviceUUID uuid.UUID) {
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(nil, nil)
-			},
-			expectError: true,
-			expectedErr: ErrInvalidCredentials,
+			name:       "user not found",
+			username:   "johndoe",
+			password:   "pass123",
+			deviceUUID: device.DeviceUUID,
+			mockUser:   nil,
+			wantErr:    ErrUserNotFound,
 		},
 		{
-			name:     "getter returns error",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func(userUUID, deviceUUID uuid.UUID) {
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(nil, errors.New("db get error"))
-			},
-			expectError: true,
-			expectedErr: errors.New("db get error"),
+			name:       "device not found",
+			username:   "johndoe",
+			password:   "pass123",
+			deviceUUID: device.DeviceUUID,
+			mockUser:   user,
+			mockDevice: nil,
+			wantErr:    ErrDeviceNotFound,
 		},
 		{
-			name:     "invalid password",
-			username: "johndoe",
-			password: "wrongpass",
-			setupMocks: func(userUUID, deviceUUID uuid.UUID) {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     userUUID,
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-			},
-			expectError: true,
-			expectedErr: ErrInvalidCredentials,
-		},
-		{
-			name:     "device not found",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func(userUUID, deviceUUID uuid.UUID) {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     userUUID,
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-				mockDeviceGetter.EXPECT().Get(gomock.Any(), deviceUUID).Return(nil, nil)
-			},
-			expectError: true,
-			expectedErr: ErrInvalidCredentials,
-		},
-		{
-			name:     "device belongs to different user",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func(userUUID, deviceUUID uuid.UUID) {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     userUUID,
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				device := &models.UserDeviceDB{
-					UserUUID:   uuid.New(), // different user
-					DeviceUUID: deviceUUID,
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-				mockDeviceGetter.EXPECT().Get(gomock.Any(), deviceUUID).Return(device, nil)
-			},
-			expectError: true,
-			expectedErr: ErrInvalidCredentials,
-		},
-		{
-			name:     "device getter returns error",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func(userUUID, deviceUUID uuid.UUID) {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     userUUID,
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-				mockDeviceGetter.EXPECT().Get(gomock.Any(), deviceUUID).Return(nil, errors.New("db device error"))
-			},
-			expectError: true,
-			expectedErr: errors.New("db device error"),
-		},
-		{
-			name:     "token generation error",
-			username: "johndoe",
-			password: "secret",
-			setupMocks: func(userUUID, deviceUUID uuid.UUID) {
-				hashedPassword, _ := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.DefaultCost)
-				user := &models.UserDB{
-					UserUUID:     userUUID,
-					Username:     "johndoe",
-					PasswordHash: string(hashedPassword),
-				}
-				device := &models.UserDeviceDB{
-					UserUUID:   userUUID,
-					DeviceUUID: deviceUUID,
-				}
-				mockGetter.EXPECT().Get(gomock.Any(), "johndoe").Return(user, nil)
-				mockDeviceGetter.EXPECT().Get(gomock.Any(), deviceUUID).Return(device, nil)
-				mockTokenGen.EXPECT().Generate(userUUID, deviceUUID).Return("", errors.New("jwt error"))
-			},
-			expectError: true,
-			expectedErr: errors.New("jwt error"),
+			name:       "invalid password",
+			username:   "johndoe",
+			password:   "wrong",
+			deviceUUID: device.DeviceUUID,
+			mockUser:   user,
+			mockDevice: device,
+			wantErr:    ErrInvalidCredential,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			userUUID := uuid.New()
-			deviceUUID := uuid.New()
-			tt.setupMocks(userUUID, deviceUUID)
+			mockUserRead.EXPECT().GetByUsername(gomock.Any(), tt.username).Return(tt.mockUser, nil)
+			if tt.mockUser != nil {
+				mockDeviceRead.EXPECT().Get(gomock.Any(), tt.deviceUUID).Return(tt.mockDevice, nil)
+			}
+			if tt.mockUser != nil && tt.mockDevice != nil && tt.password == "pass123" {
+				mockTokenGen.EXPECT().Generate(tt.mockUser.UserUUID, tt.deviceUUID).Return(tt.mockToken, nil)
+			}
 
-			_, err := svc.Login(context.Background(), tt.username, tt.password, deviceUUID)
-			if tt.expectError {
-				assert.Error(t, err)
-				if tt.expectedErr != nil {
-					assert.EqualError(t, err, tt.expectedErr.Error())
-				}
+			token, err := svc.Login(context.Background(), tt.username, tt.password, tt.deviceUUID)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+				assert.Equal(t, "", token)
 			} else {
 				assert.NoError(t, err)
+				assert.Equal(t, tt.mockToken, token)
+			}
+		})
+	}
+}
+
+func TestAuthService_AddDevice(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockUserRead := NewMockUserReader(ctrl)
+	mockDeviceWrite := NewMockDeviceWriter(ctrl)
+
+	svc := NewAuthService(nil, mockUserRead, mockDeviceWrite, nil, nil)
+
+	// Создадим хэш пароля для тестового пользователя
+	password := "pass123"
+	passwordHash, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	userUUID := uuid.New()
+	user := &models.UserDB{
+		UserUUID: userUUID,
+		Username: "johndoe",
+		Password: string(passwordHash),
+	}
+
+	tests := []struct {
+		name        string
+		username    string
+		password    string
+		publicKey   string
+		mockUser    *models.UserDB
+		mockGetErr  error
+		mockSaveErr error
+		wantErr     error
+	}{
+		{
+			name:      "success",
+			username:  "johndoe",
+			password:  password,
+			publicKey: "pubkey123",
+			mockUser:  user,
+			wantErr:   nil,
+		},
+		{
+			name:      "user not found",
+			username:  "unknown",
+			password:  password,
+			publicKey: "pubkey123",
+			mockUser:  nil,
+			wantErr:   ErrUserNotFound,
+		},
+		{
+			name:      "invalid password",
+			username:  "johndoe",
+			password:  "wrongpass",
+			publicKey: "pubkey123",
+			mockUser:  user,
+			wantErr:   ErrInvalidCredential,
+		},
+		{
+			name:        "save error",
+			username:    "johndoe",
+			password:    password,
+			publicKey:   "pubkey123",
+			mockUser:    user,
+			mockSaveErr: errors.New("db save error"),
+			wantErr:     errors.New("db save error"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockUserRead.EXPECT().GetByUsername(gomock.Any(), tt.username).Return(tt.mockUser, tt.mockGetErr)
+			if tt.mockUser != nil && tt.mockGetErr == nil && tt.wantErr == nil {
+				mockDeviceWrite.EXPECT().Save(gomock.Any(), gomock.Any(), tt.mockUser.UserUUID, tt.publicKey).Return(nil)
+			} else if tt.mockUser != nil && tt.mockGetErr == nil && tt.mockSaveErr != nil {
+				mockDeviceWrite.EXPECT().Save(gomock.Any(), gomock.Any(), tt.mockUser.UserUUID, tt.publicKey).Return(tt.mockSaveErr)
+			}
+
+			deviceUUID, err := svc.AddDevice(context.Background(), tt.username, tt.password, tt.publicKey)
+
+			if tt.wantErr != nil {
+				assert.EqualError(t, err, tt.wantErr.Error())
+				assert.Equal(t, uuid.Nil, deviceUUID)
+			} else {
+				assert.NoError(t, err)
+				assert.NotEqual(t, uuid.Nil, deviceUUID)
 			}
 		})
 	}

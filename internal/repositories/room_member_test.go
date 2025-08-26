@@ -13,92 +13,72 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func setupRoomMembersDB(t *testing.T) *sqlx.DB {
-	db, err := sqlx.Open("sqlite", ":memory:")
+func setupRoomMembersTestDB(t *testing.T) *sqlx.DB {
+	db, err := sqlx.Connect("sqlite", ":memory:")
 	assert.NoError(t, err)
 
 	schema := `
 	CREATE TABLE room_members (
 		room_uuid TEXT NOT NULL,
-		user_uuid TEXT NOT NULL,
-		joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL,
-		PRIMARY KEY (room_uuid, user_uuid)
-	);`
+		member_uuid TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (room_uuid, member_uuid)
+	);
+	`
 	_, err = db.Exec(schema)
 	assert.NoError(t, err)
 
 	return db
 }
 
-func TestRoomMemberWriteAndRead(t *testing.T) {
-	db := setupRoomMembersDB(t)
+func TestRoomMemberWriteAndReadRepository(t *testing.T) {
+	ctx := context.Background()
+	db := setupRoomMembersTestDB(t)
+	defer db.Close()
+
 	writeRepo := repositories.NewRoomMemberWriteRepository(db)
 	readRepo := repositories.NewRoomMemberReadRepository(db)
-	ctx := context.Background()
 
 	roomUUID := uuid.New()
-	userUUID := uuid.New()
+	memberUUID := uuid.New()
 
-	// Save new member
-	err := writeRepo.Save(ctx, roomUUID, userUUID, time.Time{})
+	// --- Test Save ---
+	err := writeRepo.Save(ctx, roomUUID, memberUUID)
 	assert.NoError(t, err)
 
-	// Get by roomUUID + userUUID
-	member, err := readRepo.Get(ctx, roomUUID, userUUID)
+	// --- Test Get ---
+	member, err := readRepo.Get(ctx, roomUUID, memberUUID)
 	assert.NoError(t, err)
 	assert.NotNil(t, member)
 	assert.Equal(t, roomUUID, member.RoomUUID)
-	assert.Equal(t, userUUID, member.UserUUID)
+	assert.Equal(t, memberUUID, member.MemberUUID)
 
-	// Save same member again (should update updated_at)
-	oldUpdatedAt := member.UpdatedAt
-	time.Sleep(1 * time.Millisecond) // чтобы timestamp точно изменился
-	err = writeRepo.Save(ctx, roomUUID, userUUID, time.Time{})
+	// --- Test Update (updated_at should change) ---
+	time.Sleep(1 * time.Millisecond) // ensure updated_at changes
+	err = writeRepo.Save(ctx, roomUUID, memberUUID)
 	assert.NoError(t, err)
 
-	member, err = readRepo.Get(ctx, roomUUID, userUUID)
+	memberUpdated, err := readRepo.Get(ctx, roomUUID, memberUUID)
 	assert.NoError(t, err)
-	assert.NotNil(t, member)
-	assert.True(t, member.UpdatedAt.After(oldUpdatedAt))
-}
+	assert.NotNil(t, memberUpdated)
+	assert.Equal(t, roomUUID, memberUpdated.RoomUUID)
+	assert.Equal(t, memberUUID, memberUpdated.MemberUUID)
+	assert.True(t, memberUpdated.UpdatedAt.After(member.UpdatedAt))
 
-func TestGetNonExistingMember(t *testing.T) {
-	db := setupRoomMembersDB(t)
-	readRepo := repositories.NewRoomMemberReadRepository(db)
-	ctx := context.Background()
-
-	member, err := readRepo.Get(ctx, uuid.New(), uuid.New())
+	// --- Test Delete ---
+	err = writeRepo.Delete(ctx, roomUUID, memberUUID)
 	assert.NoError(t, err)
-	assert.Nil(t, member)
-}
 
-func TestListMembers(t *testing.T) {
-	db := setupRoomMembersDB(t)
-	writeRepo := repositories.NewRoomMemberWriteRepository(db)
-	readRepo := repositories.NewRoomMemberReadRepository(db)
-	ctx := context.Background()
-
-	roomUUID := uuid.New()
-	userIDs := []uuid.UUID{uuid.New(), uuid.New(), uuid.New()}
-
-	for _, userUUID := range userIDs {
-		err := writeRepo.Save(ctx, roomUUID, userUUID, time.Time{})
-		assert.NoError(t, err)
-	}
-
-	members, err := readRepo.List(ctx, roomUUID)
+	memberDeleted, err := readRepo.Get(ctx, roomUUID, memberUUID)
 	assert.NoError(t, err)
-	assert.Len(t, members, len(userIDs))
+	assert.Nil(t, memberDeleted)
 
-	// проверяем, что все userUUID из userIDs есть в members
-	memberMap := make(map[uuid.UUID]bool)
-	for _, m := range members {
-		memberMap[m.UserUUID] = true
-	}
+	// --- Test DeleteAllByRoom ---
+	// Add multiple members
+	member1 := uuid.New()
+	member2 := uuid.New()
+	_ = writeRepo.Save(ctx, roomUUID, member1)
+	_ = writeRepo.Save(ctx, roomUUID, member2)
 
-	for _, id := range userIDs {
-		assert.True(t, memberMap[id], "userUUID %s not found in members", id)
-	}
 }

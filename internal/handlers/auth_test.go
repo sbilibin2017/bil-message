@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,7 +10,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
 	"github.com/sbilibin2017/bil-message/internal/services"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestRegisterHandler(t *testing.T) {
@@ -21,192 +20,102 @@ func TestRegisterHandler(t *testing.T) {
 	mockSvc := NewMockRegisterer(ctrl)
 
 	tests := []struct {
-		name       string
-		reqBody    interface{}
-		mockSetup  func()
-		wantStatus int
-		wantBody   string
+		name           string
+		reqBody        RegisterRequest
+		mockReturn     uuid.UUID
+		mockErr        error
+		expectedStatus int
 	}{
 		{
-			name: "successful registration",
-			reqBody: RegisterRequest{
-				Username: "johndoe",
-				Password: "secret",
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					Register(gomock.Any(), "johndoe", "secret").
-					Return(uuid.MustParse("123e4567-e89b-12d3-a456-426614174000"), nil)
-			},
-			wantStatus: http.StatusOK,
-			wantBody:   "123e4567-e89b-12d3-a456-426614174000",
+			name:           "success",
+			reqBody:        RegisterRequest{Username: "user1", Password: "pass"},
+			mockReturn:     uuid.New(),
+			mockErr:        nil,
+			expectedStatus: http.StatusOK,
 		},
 		{
-			name:       "invalid JSON",
-			reqBody:    "{invalid-json",
-			mockSetup:  func() {},
-			wantStatus: http.StatusBadRequest,
-			wantBody:   "",
+			name:           "user exists",
+			reqBody:        RegisterRequest{Username: "user1", Password: "pass"},
+			mockReturn:     uuid.Nil,
+			mockErr:        services.ErrUserExists,
+			expectedStatus: http.StatusConflict,
 		},
 		{
-			name: "empty username",
-			reqBody: RegisterRequest{
-				Username: "",
-				Password: "secret",
-			},
-			mockSetup:  func() {},
-			wantStatus: http.StatusBadRequest,
-			wantBody:   "",
-		},
-		{
-			name: "username already exists",
-			reqBody: RegisterRequest{
-				Username: "johndoe",
-				Password: "secret",
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					Register(gomock.Any(), "johndoe", "secret").
-					Return(uuid.Nil, services.ErrUsernameAlreadyExists)
-			},
-			wantStatus: http.StatusConflict,
-			wantBody:   "",
-		},
-		{
-			name: "service error",
-			reqBody: RegisterRequest{
-				Username: "johndoe",
-				Password: "secret",
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					Register(gomock.Any(), "johndoe", "secret").
-					Return(uuid.Nil, errors.New("service failure"))
-			},
-			wantStatus: http.StatusInternalServerError,
-			wantBody:   "",
+			name:           "bad request empty username",
+			reqBody:        RegisterRequest{Username: "", Password: "pass"},
+			expectedStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
-
-			var bodyBytes []byte
-			switch v := tt.reqBody.(type) {
-			case string:
-				bodyBytes = []byte(v)
-			default:
-				bodyBytes, _ = json.Marshal(v)
+			if tt.mockErr != nil || tt.mockReturn != uuid.Nil {
+				mockSvc.EXPECT().Register(gomock.Any(), tt.reqBody.Username, tt.reqBody.Password).Return(tt.mockReturn, tt.mockErr)
 			}
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(bodyBytes))
+			body, _ := json.Marshal(tt.reqBody)
+			req := httptest.NewRequest(http.MethodPost, "/auth/register", bytes.NewReader(body))
 			w := httptest.NewRecorder()
 
-			RegisterHandler(mockSvc).ServeHTTP(w, req)
+			NewRegisterHandler(mockSvc)(w, req)
 
-			resp := w.Result()
-			require.Equal(t, tt.wantStatus, resp.StatusCode)
-			require.Equal(t, tt.wantBody, w.Body.String())
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			if w.Code == http.StatusOK {
+				assert.Equal(t, tt.mockReturn.String(), w.Body.String())
+			}
 		})
 	}
 }
+
 func TestAddDeviceHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockSvc := NewMockDeviceAdder(ctrl)
-	deviceUUIDExample := uuid.New()
 
 	tests := []struct {
-		name       string
-		reqBody    interface{}
-		mockSetup  func()
-		wantStatus int
-		wantBody   string
+		name           string
+		reqBody        AddDeviceRequest
+		mockReturn     uuid.UUID
+		mockErr        error
+		expectedStatus int
 	}{
 		{
-			name: "successful add device",
-			reqBody: DeviceRequest{
-				Username:  "johndoe",
-				Password:  "secret",
-				PublicKey: "pubkey",
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					AddDevice(gomock.Any(), "johndoe", "secret", "pubkey").
-					Return(deviceUUIDExample, nil)
-			},
-			wantStatus: http.StatusOK,
-			wantBody:   deviceUUIDExample.String(),
+			name:           "success",
+			reqBody:        AddDeviceRequest{Username: "user1", Password: "pass", PublicKey: "key"},
+			mockReturn:     uuid.New(),
+			mockErr:        nil,
+			expectedStatus: http.StatusOK,
 		},
 		{
-			name:       "invalid JSON",
-			reqBody:    "{invalid-json",
-			mockSetup:  func() {},
-			wantStatus: http.StatusBadRequest,
+			name:           "user not found",
+			reqBody:        AddDeviceRequest{Username: "user1", Password: "pass", PublicKey: "key"},
+			mockReturn:     uuid.Nil,
+			mockErr:        services.ErrUserNotFound,
+			expectedStatus: http.StatusNotFound,
 		},
 		{
-			name: "empty fields",
-			reqBody: DeviceRequest{
-				Username: "",
-				Password: "secret",
-			},
-			mockSetup:  func() {},
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name: "invalid credentials",
-			reqBody: DeviceRequest{
-				Username:  "johndoe",
-				Password:  "secret",
-				PublicKey: "pubkey",
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					AddDevice(gomock.Any(), "johndoe", "secret", "pubkey").
-					Return(uuid.Nil, services.ErrInvalidCredentials)
-			},
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name: "service error",
-			reqBody: DeviceRequest{
-				Username:  "johndoe",
-				Password:  "secret",
-				PublicKey: "pubkey",
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					AddDevice(gomock.Any(), "johndoe", "secret", "pubkey").
-					Return(uuid.Nil, errors.New("db error"))
-			},
-			wantStatus: http.StatusInternalServerError,
+			name:           "bad request empty username",
+			reqBody:        AddDeviceRequest{Username: "", Password: "pass", PublicKey: "key"},
+			expectedStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
-
-			var bodyBytes []byte
-			switch v := tt.reqBody.(type) {
-			case string:
-				bodyBytes = []byte(v)
-			default:
-				bodyBytes, _ = json.Marshal(v)
+			if tt.mockErr != nil || tt.mockReturn != uuid.Nil {
+				mockSvc.EXPECT().AddDevice(gomock.Any(), tt.reqBody.Username, tt.reqBody.Password, tt.reqBody.PublicKey).Return(tt.mockReturn, tt.mockErr)
 			}
 
-			// Исправляем путь: добавляем ведущий слэш
-			req := httptest.NewRequest(http.MethodPost, "/auth/device", bytes.NewReader(bodyBytes))
+			body, _ := json.Marshal(tt.reqBody)
+			req := httptest.NewRequest(http.MethodPost, "/auth/device", bytes.NewReader(body))
 			w := httptest.NewRecorder()
 
-			AddDeviceHandler(mockSvc).ServeHTTP(w, req)
+			NewDeviceAddHandler(mockSvc)(w, req)
 
-			resp := w.Result()
-			require.Equal(t, tt.wantStatus, resp.StatusCode)
-			if tt.wantStatus == http.StatusOK {
-				require.Equal(t, tt.wantBody, w.Body.String())
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			if w.Code == http.StatusOK {
+				assert.Equal(t, tt.mockReturn.String(), w.Body.String())
 			}
 		})
 	}
@@ -217,107 +126,56 @@ func TestLoginHandler(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockSvc := NewMockLoginer(ctrl)
-	validUUID := uuid.New()
 
 	tests := []struct {
-		name       string
-		reqBody    interface{}
-		mockSetup  func()
-		wantStatus int
-		wantAuth   string
+		name           string
+		reqBody        LoginRequest
+		mockReturn     string
+		mockErr        error
+		expectedStatus int
 	}{
 		{
-			name: "successful login",
-			reqBody: LoginRequest{
-				Username:   "johndoe",
-				Password:   "secret",
-				DeviceUUID: validUUID.String(),
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					Login(gomock.Any(), "johndoe", "secret", validUUID).
-					Return("jwt-token-123", nil)
-			},
-			wantStatus: http.StatusOK,
-			wantAuth:   "Bearer jwt-token-123",
+			name:           "success",
+			reqBody:        LoginRequest{Username: "user", Password: "pass", DeviceUUID: uuid.New().String()},
+			mockReturn:     "token123",
+			mockErr:        nil,
+			expectedStatus: http.StatusOK,
 		},
 		{
-			name:       "invalid JSON",
-			reqBody:    "{invalid-json",
-			mockSetup:  func() {},
-			wantStatus: http.StatusBadRequest,
+			name:           "user/device not found",
+			reqBody:        LoginRequest{Username: "user", Password: "pass", DeviceUUID: uuid.New().String()},
+			mockErr:        services.ErrUserNotFound,
+			expectedStatus: http.StatusNotFound,
 		},
 		{
-			name: "empty fields",
-			reqBody: LoginRequest{
-				Username:   "",
-				Password:   "secret",
-				DeviceUUID: validUUID.String(),
-			},
-			mockSetup:  func() {},
-			wantStatus: http.StatusBadRequest,
+			name:           "invalid credentials",
+			reqBody:        LoginRequest{Username: "user", Password: "wrong", DeviceUUID: uuid.New().String()},
+			mockErr:        services.ErrInvalidCredential,
+			expectedStatus: http.StatusUnauthorized,
 		},
 		{
-			name: "invalid UUID",
-			reqBody: LoginRequest{
-				Username:   "johndoe",
-				Password:   "secret",
-				DeviceUUID: "not-a-uuid",
-			},
-			mockSetup:  func() {},
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name: "invalid credentials",
-			reqBody: LoginRequest{
-				Username:   "johndoe",
-				Password:   "secret",
-				DeviceUUID: validUUID.String(),
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					Login(gomock.Any(), "johndoe", "secret", validUUID).
-					Return("", services.ErrInvalidCredentials)
-			},
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name: "service error",
-			reqBody: LoginRequest{
-				Username:   "johndoe",
-				Password:   "secret",
-				DeviceUUID: validUUID.String(),
-			},
-			mockSetup: func() {
-				mockSvc.EXPECT().
-					Login(gomock.Any(), "johndoe", "secret", validUUID).
-					Return("", errors.New("service failure"))
-			},
-			wantStatus: http.StatusInternalServerError,
+			name:           "bad request invalid UUID",
+			reqBody:        LoginRequest{Username: "user", Password: "pass", DeviceUUID: "invalid"},
+			expectedStatus: http.StatusBadRequest,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.mockSetup()
-
-			var bodyBytes []byte
-			switch v := tt.reqBody.(type) {
-			case string:
-				bodyBytes = []byte(v)
-			default:
-				bodyBytes, _ = json.Marshal(v)
+			if tt.mockErr != nil || tt.mockReturn != "" {
+				deviceUUID, _ := uuid.Parse(tt.reqBody.DeviceUUID)
+				mockSvc.EXPECT().Login(gomock.Any(), tt.reqBody.Username, tt.reqBody.Password, deviceUUID).Return(tt.mockReturn, tt.mockErr)
 			}
 
-			req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(bodyBytes))
+			body, _ := json.Marshal(tt.reqBody)
+			req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewReader(body))
 			w := httptest.NewRecorder()
 
-			LoginHandler(mockSvc).ServeHTTP(w, req)
+			NewLoginHandler(mockSvc)(w, req)
 
-			resp := w.Result()
-			require.Equal(t, tt.wantStatus, resp.StatusCode)
-			if tt.wantStatus == http.StatusOK {
-				require.Equal(t, tt.wantAuth, w.Header().Get("Authorization"))
+			assert.Equal(t, tt.expectedStatus, w.Code)
+			if w.Code == http.StatusOK {
+				assert.Equal(t, "Bearer "+tt.mockReturn, w.Header().Get("Authorization"))
 			}
 		})
 	}

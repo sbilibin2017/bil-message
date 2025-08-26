@@ -13,144 +13,106 @@ import (
 	models "github.com/sbilibin2017/bil-message/internal/models"
 )
 
-// MockUserGetter is a mock of UserGetter interface.
-type MockUserGetter struct {
+// MockUserWriter is a mock of UserWriter interface.
+type MockUserWriter struct {
 	ctrl     *gomock.Controller
-	recorder *MockUserGetterMockRecorder
+	recorder *MockUserWriterMockRecorder
 }
 
-// MockUserGetterMockRecorder is the mock recorder for MockUserGetter.
-type MockUserGetterMockRecorder struct {
-	mock *MockUserGetter
+// MockUserWriterMockRecorder is the mock recorder for MockUserWriter.
+type MockUserWriterMockRecorder struct {
+	mock *MockUserWriter
 }
 
-// NewMockUserGetter creates a new mock instance.
-func NewMockUserGetter(ctrl *gomock.Controller) *MockUserGetter {
-	mock := &MockUserGetter{ctrl: ctrl}
-	mock.recorder = &MockUserGetterMockRecorder{mock}
+// NewMockUserWriter creates a new mock instance.
+func NewMockUserWriter(ctrl *gomock.Controller) *MockUserWriter {
+	mock := &MockUserWriter{ctrl: ctrl}
+	mock.recorder = &MockUserWriterMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockUserGetter) EXPECT() *MockUserGetterMockRecorder {
-	return m.recorder
-}
-
-// Get mocks base method.
-func (m *MockUserGetter) Get(ctx context.Context, username string) (*models.UserDB, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", ctx, username)
-	ret0, _ := ret[0].(*models.UserDB)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Get indicates an expected call of Get.
-func (mr *MockUserGetterMockRecorder) Get(ctx, username interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockUserGetter)(nil).Get), ctx, username)
-}
-
-// MockUserSaver is a mock of UserSaver interface.
-type MockUserSaver struct {
-	ctrl     *gomock.Controller
-	recorder *MockUserSaverMockRecorder
-}
-
-// MockUserSaverMockRecorder is the mock recorder for MockUserSaver.
-type MockUserSaverMockRecorder struct {
-	mock *MockUserSaver
-}
-
-// NewMockUserSaver creates a new mock instance.
-func NewMockUserSaver(ctrl *gomock.Controller) *MockUserSaver {
-	mock := &MockUserSaver{ctrl: ctrl}
-	mock.recorder = &MockUserSaverMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockUserSaver) EXPECT() *MockUserSaverMockRecorder {
+func (m *MockUserWriter) EXPECT() *MockUserWriterMockRecorder {
 	return m.recorder
 }
 
 // Save mocks base method.
-func (m *MockUserSaver) Save(ctx context.Context, userUUID uuid.UUID, username, passwordHash string) error {
+func (m *MockUserWriter) Save(ctx context.Context, userUUID uuid.UUID, username, password string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Save", ctx, userUUID, username, passwordHash)
+	ret := m.ctrl.Call(m, "Save", ctx, userUUID, username, password)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockUserSaverMockRecorder) Save(ctx, userUUID, username, passwordHash interface{}) *gomock.Call {
+func (mr *MockUserWriterMockRecorder) Save(ctx, userUUID, username, password interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockUserSaver)(nil).Save), ctx, userUUID, username, passwordHash)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockUserWriter)(nil).Save), ctx, userUUID, username, password)
 }
 
-// MockDeviceGetter is a mock of DeviceGetter interface.
-type MockDeviceGetter struct {
+// MockUserReader is a mock of UserReader interface.
+type MockUserReader struct {
 	ctrl     *gomock.Controller
-	recorder *MockDeviceGetterMockRecorder
+	recorder *MockUserReaderMockRecorder
 }
 
-// MockDeviceGetterMockRecorder is the mock recorder for MockDeviceGetter.
-type MockDeviceGetterMockRecorder struct {
-	mock *MockDeviceGetter
+// MockUserReaderMockRecorder is the mock recorder for MockUserReader.
+type MockUserReaderMockRecorder struct {
+	mock *MockUserReader
 }
 
-// NewMockDeviceGetter creates a new mock instance.
-func NewMockDeviceGetter(ctrl *gomock.Controller) *MockDeviceGetter {
-	mock := &MockDeviceGetter{ctrl: ctrl}
-	mock.recorder = &MockDeviceGetterMockRecorder{mock}
+// NewMockUserReader creates a new mock instance.
+func NewMockUserReader(ctrl *gomock.Controller) *MockUserReader {
+	mock := &MockUserReader{ctrl: ctrl}
+	mock.recorder = &MockUserReaderMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDeviceGetter) EXPECT() *MockDeviceGetterMockRecorder {
+func (m *MockUserReader) EXPECT() *MockUserReaderMockRecorder {
 	return m.recorder
 }
 
-// Get mocks base method.
-func (m *MockDeviceGetter) Get(ctx context.Context, deviceUUID uuid.UUID) (*models.UserDeviceDB, error) {
+// GetByUsername mocks base method.
+func (m *MockUserReader) GetByUsername(ctx context.Context, username string) (*models.UserDB, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", ctx, deviceUUID)
-	ret0, _ := ret[0].(*models.UserDeviceDB)
+	ret := m.ctrl.Call(m, "GetByUsername", ctx, username)
+	ret0, _ := ret[0].(*models.UserDB)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Get indicates an expected call of Get.
-func (mr *MockDeviceGetterMockRecorder) Get(ctx, deviceUUID interface{}) *gomock.Call {
+// GetByUsername indicates an expected call of GetByUsername.
+func (mr *MockUserReaderMockRecorder) GetByUsername(ctx, username interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockDeviceGetter)(nil).Get), ctx, deviceUUID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUsername", reflect.TypeOf((*MockUserReader)(nil).GetByUsername), ctx, username)
 }
 
-// MockDeviceSaver is a mock of DeviceSaver interface.
-type MockDeviceSaver struct {
+// MockDeviceWriter is a mock of DeviceWriter interface.
+type MockDeviceWriter struct {
 	ctrl     *gomock.Controller
-	recorder *MockDeviceSaverMockRecorder
+	recorder *MockDeviceWriterMockRecorder
 }
 
-// MockDeviceSaverMockRecorder is the mock recorder for MockDeviceSaver.
-type MockDeviceSaverMockRecorder struct {
-	mock *MockDeviceSaver
+// MockDeviceWriterMockRecorder is the mock recorder for MockDeviceWriter.
+type MockDeviceWriterMockRecorder struct {
+	mock *MockDeviceWriter
 }
 
-// NewMockDeviceSaver creates a new mock instance.
-func NewMockDeviceSaver(ctrl *gomock.Controller) *MockDeviceSaver {
-	mock := &MockDeviceSaver{ctrl: ctrl}
-	mock.recorder = &MockDeviceSaverMockRecorder{mock}
+// NewMockDeviceWriter creates a new mock instance.
+func NewMockDeviceWriter(ctrl *gomock.Controller) *MockDeviceWriter {
+	mock := &MockDeviceWriter{ctrl: ctrl}
+	mock.recorder = &MockDeviceWriterMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDeviceSaver) EXPECT() *MockDeviceSaverMockRecorder {
+func (m *MockDeviceWriter) EXPECT() *MockDeviceWriterMockRecorder {
 	return m.recorder
 }
 
 // Save mocks base method.
-func (m *MockDeviceSaver) Save(ctx context.Context, deviceUUID, userUUID uuid.UUID, publicKey string) error {
+func (m *MockDeviceWriter) Save(ctx context.Context, deviceUUID, userUUID uuid.UUID, publicKey string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Save", ctx, deviceUUID, userUUID, publicKey)
 	ret0, _ := ret[0].(error)
@@ -158,9 +120,47 @@ func (m *MockDeviceSaver) Save(ctx context.Context, deviceUUID, userUUID uuid.UU
 }
 
 // Save indicates an expected call of Save.
-func (mr *MockDeviceSaverMockRecorder) Save(ctx, deviceUUID, userUUID, publicKey interface{}) *gomock.Call {
+func (mr *MockDeviceWriterMockRecorder) Save(ctx, deviceUUID, userUUID, publicKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockDeviceSaver)(nil).Save), ctx, deviceUUID, userUUID, publicKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Save", reflect.TypeOf((*MockDeviceWriter)(nil).Save), ctx, deviceUUID, userUUID, publicKey)
+}
+
+// MockDeviceReader is a mock of DeviceReader interface.
+type MockDeviceReader struct {
+	ctrl     *gomock.Controller
+	recorder *MockDeviceReaderMockRecorder
+}
+
+// MockDeviceReaderMockRecorder is the mock recorder for MockDeviceReader.
+type MockDeviceReaderMockRecorder struct {
+	mock *MockDeviceReader
+}
+
+// NewMockDeviceReader creates a new mock instance.
+func NewMockDeviceReader(ctrl *gomock.Controller) *MockDeviceReader {
+	mock := &MockDeviceReader{ctrl: ctrl}
+	mock.recorder = &MockDeviceReaderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDeviceReader) EXPECT() *MockDeviceReaderMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockDeviceReader) Get(ctx context.Context, deviceUUID uuid.UUID) (*models.DeviceDB, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", ctx, deviceUUID)
+	ret0, _ := ret[0].(*models.DeviceDB)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockDeviceReaderMockRecorder) Get(ctx, deviceUUID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockDeviceReader)(nil).Get), ctx, deviceUUID)
 }
 
 // MockTokenGenerator is a mock of TokenGenerator interface.

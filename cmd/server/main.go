@@ -1,169 +1,202 @@
-// main.go
-// @title       bil-message API
-// @version     1.0
-// @description API для защищённого обмена сообщениями между пользователями
-// @host        localhost:8080
-// @BasePath    /api/v1
 package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
-	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
-	"github.com/sbilibin2017/bil-message/internal/chat"
+	"github.com/go-chi/chi/v5"
+	"github.com/nats-io/nats.go"
 	"github.com/sbilibin2017/bil-message/internal/db"
 	"github.com/sbilibin2017/bil-message/internal/handlers"
 	"github.com/sbilibin2017/bil-message/internal/jwt"
 	"github.com/sbilibin2017/bil-message/internal/repositories"
 	"github.com/sbilibin2017/bil-message/internal/services"
-	"github.com/spf13/pflag"
 )
+
+// Build info, set via -ldflags
+var (
+	buildVersion = "N/A"
+	buildCommit  = "N/A"
+	buildDate    = "N/A"
+)
+
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\nCommit: %s\nDate: %s\n", buildVersion, buildCommit, buildDate)
+}
+
+var (
+	addr           string
+	version        string = "/api/v1"
+	databaseDriver string = "pgx"
+	databaseDSN    string
+	jwtSecretKey   string
+	jwtExp         time.Duration
+	natsURL        string
+)
+
+func parseFlags() {
+	flag.StringVar(&addr, "a", ":8080", "HTTP server address")
+	flag.StringVar(&databaseDSN, "d", "postgres://user:password@localhost:5432/db?sslmode=disable", "Database DSN (connection string)")
+	flag.StringVar(&jwtSecretKey, "k", "secret-key", "JWT secret key")
+	flag.DurationVar(&jwtExp, "e", time.Duration(1)*time.Hour, "JWT expiration duration in hours")
+	flag.StringVar(&natsURL, "n", nats.DefaultURL, "NATS server URL")
+	flag.Parse()
+}
 
 func main() {
 	printBuildInfo()
 	parseFlags()
-	if err := run(context.Background()); err != nil {
+
+	err := run(
+		context.Background(),
+		addr,
+		version,
+		databaseDriver,
+		databaseDSN,
+		jwtSecretKey,
+		jwtExp,
+		natsURL,
+	)
+	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-// Флаги сборки (ldflags)
-var (
-	buildCommit  string = "N/A"
-	buildDate    string = "N/A"
-	buildVersion string = "N/A"
-)
+// run запускает HTTP сервер с эндпоинтами авторизации
+func run(
+	ctx context.Context,
+	addr string,
+	version string,
+	databaseDriver string,
+	databaseDSN string,
+	jwtSecretKey string,
+	jwtExp time.Duration,
+	natsURL string,
+) error {
+	// Подключение к NATS
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
 
-// printBuildInfo выводит информацию о версии, коммите и дате сборки
-func printBuildInfo() {
-	log.Printf("Server build info:\n")
-	log.Printf("  Version: %s\n", buildVersion)
-	log.Printf("  Commit:  %s\n", buildCommit)
-	log.Printf("  Date:    %s\n", buildDate)
-}
-
-// Флаги командной строки
-var (
-	address      string
-	databaseDSN  string
-	jwtSecretKey string
-	jwtExp       int
-)
-
-// parseFlags парсит флаги командной строки
-func parseFlags() {
-	pflag.StringVarP(&address, "address", "a", ":8080", "Адрес и порт для запуска сервера")
-	pflag.StringVarP(&databaseDSN, "database-dsn", "d", "postgres://user:pass@localhost:5432/db?sslmode=disable", "DSN для подключения к базе данных")
-	pflag.StringVarP(&jwtSecretKey, "jwt-secret", "", "super-secret-key", "Секретный ключ для генерации JWT")
-	pflag.IntVarP(&jwtExp, "jwt-expiration", "", 86400, "Время жизни JWT токена в секундах")
-	pflag.Parse()
-}
-
-// run выполняет запуск сервера
-func run(ctx context.Context) error {
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM, syscall.SIGQUIT)
-	defer stop()
-
+	// Подключение к базе данных
 	db, err := db.New(
-		"pgx",
+		databaseDriver,
 		databaseDSN,
 		db.WithMaxOpenConns(10),
-		db.WithMaxIdleConns(3),
+		db.WithMaxIdleConns(5),
 	)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	userReadRepo := repositories.NewUserReadRepository(db)
+	// Репозитории
 	userWriteRepo := repositories.NewUserWriteRepository(db)
+	userReadRepo := repositories.NewUserReadRepository(db)
 
-	deviceReadRepo := repositories.NewDeviceReadRepository(db)
 	deviceWriteRepo := repositories.NewDeviceWriteRepository(db)
+	deviceReadRepo := repositories.NewDeviceReadRepository(db)
 
-	roomReadRepo := repositories.NewRoomReadRepository(db)
 	roomWriteRepo := repositories.NewRoomWriteRepository(db)
+	roomReadRepo := repositories.NewRoomReadRepository(db)
 
-	roomMemberReadRepo := repositories.NewRoomMemberReadRepository(db)
 	roomMemberWriteRepo := repositories.NewRoomMemberWriteRepository(db)
+	roomMemberReadRepo := repositories.NewRoomMemberReadRepository(db)
 
+	// JWT генератор
 	jwt, err := jwt.New(
 		jwt.WithSecretKey(jwtSecretKey),
-		jwt.WithExpiration(time.Duration(jwtExp)*time.Second),
+		jwt.WithExpiration(jwtExp),
 	)
 	if err != nil {
 		return err
 	}
 
-	authService := services.NewAuthService(
-		userReadRepo,
+	// Сервис авторизации
+	authSvc := services.NewAuthService(
 		userWriteRepo,
-		deviceReadRepo,
+		userReadRepo,
 		deviceWriteRepo,
+		deviceReadRepo,
 		jwt,
 	)
 
-	chatService := services.NewChatService(
+	// Сервис комнат
+	roomSvc := services.NewRoomService(
 		roomWriteRepo,
 		roomReadRepo,
 		roomMemberWriteRepo,
 		roomMemberReadRepo,
+		userReadRepo,
 	)
 
+	// Инициализация обработчиков
+	registerHandler := handlers.NewRegisterHandler(authSvc)
+	deviceAddHandler := handlers.NewDeviceAddHandler(authSvc)
+	loginHandler := handlers.NewLoginHandler(authSvc)
+
+	roomCreateHandler := handlers.NewRoomCreateHandler(roomSvc, jwt)
+	roomDeleteHandler := handlers.NewRoomDeleteHandler(roomSvc, jwt)
+	roomMemberAddHandler := handlers.NewRoomMemberAddHandler(roomSvc, jwt)
+	roomMemberRemoveHandler := handlers.NewRoomMemberRemoveHandler(roomSvc, jwt)
+	roomWSHandler := handlers.NewRoomWebsocketHandler(jwt, nc)
+
+	// Chi роутер
 	r := chi.NewRouter()
-	r.Use(middleware.Logger)
+
+	// Middleware
 	r.Use(middleware.Recoverer)
+	r.Use(middleware.Logger)
 
-	r.Route("/api/v1", func(r chi.Router) {
-		r.Route("/auth", func(r chi.Router) {
-			r.Post("/register", handlers.RegisterHandler(authService))
-			r.Post("/device", handlers.AddDeviceHandler(authService))
-			r.Post("/login", handlers.LoginHandler(authService))
-		})
+	// Группа роутов: /{version}
+	r.Route(version, func(r chi.Router) {
+		// Auth
+		r.Post("/auth/register", registerHandler)
+		r.Post("/auth/device/add", deviceAddHandler)
+		r.Post("/auth/login", loginHandler)
 
-		r.Route("/chat", func(r chi.Router) {
-			r.Post("/", handlers.CreateChatHandler(chatService, jwt))
-			r.Delete("/{room-uuid}", handlers.RemoveChatHandler(chatService, jwt))
-			r.Post("/{room-uuid}/{member-uuid}", handlers.AddChatMemberHandler(chatService, jwt))
-			r.Delete("/{room-uuid}/{member-uuid}", handlers.RemoveChatMemberHandler(chatService, jwt))
-			r.Get("/{room-uuid}/ws", handlers.ChatWebSocketHandler(
-				chat.NewChatClient,
-				chat.NewChatRoom,
-				jwt,
-			))
-		})
+		// Rooms
+		r.Post("/rooms", roomCreateHandler)
+		r.Delete("/rooms/{room-uuid}", roomDeleteHandler)
+		r.Post("/rooms/{room-uuid}/{member-uuid}", roomMemberAddHandler)
+		r.Post("/rooms/{room-uuid}/{member-uuid}", roomMemberRemoveHandler)
+		r.Get("/room/{room-uuid}/ws", roomWSHandler)
 	})
 
 	srv := &http.Server{
-		Addr:    address,
+		Addr:    addr,
 		Handler: r,
 	}
 
-	errChan := make(chan error, 1)
+	// Канал для ошибок сервера
+	errCh := make(chan error, 1)
 
+	// Graceful shutdown
 	go func() {
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errChan <- err
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			errCh <- err
 		}
-		close(errChan)
+		close(errCh)
 	}()
 
-	select {
-	case <-ctx.Done():
-		ctxShutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(ctxShutdown); err != nil {
-			return err
-		}
-		return nil
-	case err := <-errChan:
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
 	}
+
+	// Проверяем возможную ошибку shutdown
+	if shutdownErr, ok := <-errCh; ok && shutdownErr != nil {
+		return shutdownErr
+	}
+
+	return nil
 }

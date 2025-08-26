@@ -1,0 +1,19 @@
+@startuml
+actor "CLI Client" as CLI
+
+participant "Auth Service" as Auth
+participant "Room Service" as Room
+participant "Message Producer Service" as Producer
+participant "Message Worker Service" as Worker
+
+CLI -> Auth: POST /api/v1/auth/register {username, password} {userUUID, error}
+CLI -> Auth: POST /api/v1/auth/device/add {userUUID} {deviceUUID, error}
+CLI -> Auth: POST /api/v1/auth/token {userUUID, deviceUUID} {token, error}
+CLI -> Room: POST /api/v1/rooms/save {room_name, Authorization: Bearer token} {roomUUID, error}
+CLI -> Producer: WS /ws/{roomUUID} {Authorization: Bearer token}
+CLI -> Producer: Send "Hello Room" {text}
+Producer -> Worker: Publish message to NATS "messages" {roomUUID, userUUID, deviceUUID, text, timestamp}
+Worker --> Producer: Process message {roomUUID, userUUID, deviceUUID, text, timestamp, error}
+Producer -> CLI: Deliver "Hello Room" {text, userUUID, deviceUUID, timestamp}
+
+@enduml

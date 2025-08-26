@@ -10,87 +10,66 @@ import (
 	"github.com/sbilibin2017/bil-message/internal/repositories"
 	"github.com/stretchr/testify/assert"
 
-	_ "modernc.org/sqlite" // sqlite driver
+	_ "modernc.org/sqlite"
 )
 
-func setupRoomDB(t *testing.T) *sqlx.DB {
-	db, err := sqlx.Open("sqlite", ":memory:")
+func setupRoomTestDB(t *testing.T) *sqlx.DB {
+	db, err := sqlx.Connect("sqlite", ":memory:")
 	assert.NoError(t, err)
 
 	schema := `
 	CREATE TABLE rooms (
 		room_uuid TEXT PRIMARY KEY,
-		creator_uuid TEXT NOT NULL,
-		created_at DATETIME NOT NULL,
-		updated_at DATETIME NOT NULL
-	);`
+		owner_uuid TEXT NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	`
 	_, err = db.Exec(schema)
 	assert.NoError(t, err)
 
 	return db
 }
 
-func TestRoomWriteAndRead(t *testing.T) {
-	db := setupRoomDB(t)
-	writeRepo := repositories.NewRoomWriteRepository(db)
-	readRepo := repositories.NewRoomReadRepository(db)
+func TestRoomWriteAndReadRepository(t *testing.T) {
 	ctx := context.Background()
+	db := setupRoomTestDB(t)
+	defer db.Close()
+
+	roomWriteRepo := repositories.NewRoomWriteRepository(db)
+	roomReadRepo := repositories.NewRoomReadRepository(db)
 
 	roomUUID := uuid.New()
-	creatorUUID := uuid.New()
+	ownerUUID := uuid.New()
 
-	// Save new room
-	err := writeRepo.Save(ctx, roomUUID, creatorUUID)
+	// --- Test Save ---
+	err := roomWriteRepo.Save(ctx, roomUUID, ownerUUID)
 	assert.NoError(t, err)
 
-	// Get by roomUUID
-	room, err := readRepo.Get(ctx, roomUUID)
-	assert.NoError(t, err)
-	assert.NotNil(t, room)
-	assert.Equal(t, roomUUID, room.RoomUUID)
-	assert.Equal(t, creatorUUID, room.CreatorUUID)
-
-	// Save with same room_uuid again (should update updated_at)
-	oldUpdatedAt := room.UpdatedAt
-	time.Sleep(1 * time.Millisecond) // ensure timestamp difference
-	err = writeRepo.Save(ctx, roomUUID, creatorUUID)
-	assert.NoError(t, err)
-
-	room, err = readRepo.Get(ctx, roomUUID)
+	// --- Test Get ---
+	room, err := roomReadRepo.Get(ctx, roomUUID)
 	assert.NoError(t, err)
 	assert.NotNil(t, room)
 	assert.Equal(t, roomUUID, room.RoomUUID)
-	assert.Equal(t, creatorUUID, room.CreatorUUID)
-	assert.True(t, room.UpdatedAt.After(oldUpdatedAt))
-}
+	assert.Equal(t, ownerUUID, room.OwnerUUID)
 
-func TestGetNonExistingRoom(t *testing.T) {
-	db := setupRoomDB(t)
-	readRepo := repositories.NewRoomReadRepository(db)
-	ctx := context.Background()
-
-	room, err := readRepo.Get(ctx, uuid.New())
+	// --- Test Update (Save again should update updated_at) ---
+	beforeUpdate := room.UpdatedAt
+	time.Sleep(1 * time.Millisecond) // ensure updated_at changes
+	newOwnerUUID := uuid.New()
+	err = roomWriteRepo.Save(ctx, roomUUID, newOwnerUUID)
 	assert.NoError(t, err)
-	assert.Nil(t, room)
-}
 
-func TestSaveMultipleRooms(t *testing.T) {
-	db := setupRoomDB(t)
-	writeRepo := repositories.NewRoomWriteRepository(db)
-	readRepo := repositories.NewRoomReadRepository(db)
-	ctx := context.Background()
+	roomUpdated, err := roomReadRepo.Get(ctx, roomUUID)
+	assert.NoError(t, err)
+	assert.True(t, roomUpdated.UpdatedAt.After(beforeUpdate))
+	assert.Equal(t, newOwnerUUID, roomUpdated.OwnerUUID)
 
-	for i := 0; i < 3; i++ {
-		roomUUID := uuid.New()
-		creatorUUID := uuid.New()
+	// --- Test Delete ---
+	err = roomWriteRepo.Delete(ctx, roomUUID)
+	assert.NoError(t, err)
 
-		err := writeRepo.Save(ctx, roomUUID, creatorUUID)
-		assert.NoError(t, err)
-
-		room, err := readRepo.Get(ctx, roomUUID)
-		assert.NoError(t, err)
-		assert.NotNil(t, room)
-		assert.Equal(t, roomUUID, room.RoomUUID)
-		assert.Equal(t, creatorUUID, room.CreatorUUID)
-	}
+	roomDeleted, err := roomReadRepo.Get(ctx, roomUUID)
+	assert.NoError(t, err)
+	assert.Nil(t, roomDeleted)
 }

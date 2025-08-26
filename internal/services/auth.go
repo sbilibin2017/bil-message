@@ -9,188 +9,141 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Ошибки
+// Ошибки сервиса
 var (
-	// ErrUsernameAlreadyExists возвращается при попытке регистрации уже существующего пользователя
-	ErrUsernameAlreadyExists = errors.New("username already exists")
-
-	// ErrInvalidCredentials возвращается, если переданы неверные имя пользователя или пароль
-	ErrInvalidCredentials = errors.New("invalid username or password")
+	ErrUserExists        = errors.New("user already exists")
+	ErrUserNotFound      = errors.New("user does not exist")
+	ErrDeviceNotFound    = errors.New("device does not exist")
+	ErrInvalidCredential = errors.New("invalid credentials")
 )
 
-//
-// Интерфейсы
-//
-
-// UserGetter описывает интерфейс получения пользователя по username
-type UserGetter interface {
-	// Get возвращает пользователя по имени или nil, если такого пользователя нет
-	Get(ctx context.Context, username string) (*models.UserDB, error)
+// UserWriter интерфейс для записи пользователей в БД
+type UserWriter interface {
+	Save(ctx context.Context, userUUID uuid.UUID, username, password string) error
 }
 
-// UserSaver описывает интерфейс сохранения нового пользователя
-type UserSaver interface {
-	// Save сохраняет пользователя с UUID, username и хэшем пароля
-	Save(ctx context.Context, userUUID uuid.UUID, username string, passwordHash string) error
+// UserReader интерфейс для чтения пользователей из БД
+type UserReader interface {
+	GetByUsername(ctx context.Context, username string) (*models.UserDB, error)
 }
 
-// DeviceGetter
-type DeviceGetter interface {
-	Get(ctx context.Context, deviceUUID uuid.UUID) (*models.UserDeviceDB, error)
+// DeviceWriter интерфейс для записи устройств в БД
+type DeviceWriter interface {
+	Save(ctx context.Context, deviceUUID, userUUID uuid.UUID, publicKey string) error
 }
 
-// DeviceSaver описывает интерфейс сохранения нового устройства пользователя
-type DeviceSaver interface {
-	// Save сохраняет устройство с UUID, привязанное к пользователю и его публичному ключу
-	Save(ctx context.Context, deviceUUID uuid.UUID, userUUID uuid.UUID, publicKey string) error
+// DeviceReader интерфейс для чтения устройств из БД
+type DeviceReader interface {
+	Get(ctx context.Context, deviceUUID uuid.UUID) (*models.DeviceDB, error)
 }
 
-// TokenGenerator описывает интерфейс генерации JWT токена
+// TokenGenerator интерфейс для генерации JWT токенов
 type TokenGenerator interface {
-	// Generate создает JWT токен, содержащий userUUID и deviceUUID
 	Generate(userUUID uuid.UUID, deviceUUID uuid.UUID) (string, error)
 }
 
-//
-// Сервис аутентификации и управления пользователями/устройствами
-//
-
-// AuthService предоставляет методы для:
-//   - регистрации пользователей
-//   - добавления устройств
-//   - входа (логина) с проверкой пароля и генерацией токена
+// AuthService сервис авторизации
 type AuthService struct {
-	ug UserGetter
-	us UserSaver
-	dg DeviceGetter
-	ds DeviceSaver
-	tg TokenGenerator
+	userWriteRepo   UserWriter
+	userReadRepo    UserReader
+	deviceWriteRepo DeviceWriter
+	deviceReadRepo  DeviceReader
+	tokenGen        TokenGenerator
 }
 
-// NewAuthService создаёт новый экземпляр AuthService
+// NewAuthService создаёт новый сервис авторизации
 func NewAuthService(
-	ug UserGetter,
-	us UserSaver,
-	dg DeviceGetter,
-	ds DeviceSaver,
-	tg TokenGenerator,
+	userWriteRepo UserWriter,
+	userReadRepo UserReader,
+	deviceWriteRepo DeviceWriter,
+	deviceReadRepo DeviceReader,
+	tokenGen TokenGenerator,
 ) *AuthService {
 	return &AuthService{
-		ug: ug,
-		us: us,
-		dg: dg,
-		ds: ds,
-		tg: tg,
+		userWriteRepo:   userWriteRepo,
+		userReadRepo:    userReadRepo,
+		deviceWriteRepo: deviceWriteRepo,
+		deviceReadRepo:  deviceReadRepo,
+		tokenGen:        tokenGen,
 	}
 }
 
-// Register создаёт нового пользователя с указанными username и password.
-// Если пользователь уже существует, возвращает ErrUsernameAlreadyExists.
-// Пароль хэшируется с использованием bcrypt.
-func (svc *AuthService) Register(
-	ctx context.Context,
-	username string,
-	password string,
-) (userUUID uuid.UUID, err error) {
-	// Проверяем, существует ли пользователь
-	existing, err := svc.ug.Get(ctx, username)
+// Register создаёт нового пользователя
+func (s *AuthService) Register(ctx context.Context, username, password string) (userUUID uuid.UUID, err error) {
+	var user *models.UserDB
+	user, err = s.userReadRepo.GetByUsername(ctx, username)
 	if err != nil {
-		return uuid.Nil, err
+		return
 	}
-	if existing != nil {
-		return uuid.Nil, ErrUsernameAlreadyExists
+	if user != nil {
+		err = ErrUserExists
+		return
 	}
 
-	// Хэшируем пароль
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	var hash []byte
+	hash, err = bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
-		return uuid.Nil, err
+		return
 	}
 
 	userUUID = uuid.New()
-
-	// Сохраняем пользователя
-	err = svc.us.Save(ctx, userUUID, username, string(hashedPassword))
-	if err != nil {
-		return uuid.Nil, err
-	}
-	return userUUID, nil
+	err = s.userWriteRepo.Save(ctx, userUUID, username, string(hash))
+	return
 }
 
-// AddDevice добавляет новое устройство пользователю.
-// Проверяет логин/пароль, создает UUID для устройства, сохраняет его в БД вместе с publicKey.
-// Возвращает UUID устройства. JWT не создается (это делает Login).
-func (svc *AuthService) AddDevice(
-	ctx context.Context,
-	username string,
-	password string,
-	publicKey string,
-) (deviceUUID uuid.UUID, err error) {
-	// Проверяем пользователя
-	user, err := svc.ug.Get(ctx, username)
+// AddDevice добавляет новое устройство для пользователя по username/password
+func (s *AuthService) AddDevice(ctx context.Context, username, password, publicKey string) (deviceUUID uuid.UUID, err error) {
+	var user *models.UserDB
+	user, err = s.userReadRepo.GetByUsername(ctx, username)
 	if err != nil {
-		return uuid.Nil, err
+		return
 	}
 	if user == nil {
-		return uuid.Nil, ErrInvalidCredentials
+		err = ErrUserNotFound
+		return
 	}
 
-	// Проверяем пароль
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return uuid.Nil, ErrInvalidCredentials
+	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		err = ErrInvalidCredential
+		return
 	}
 
-	// Генерируем UUID устройства
 	deviceUUID = uuid.New()
-
-	// Сохраняем устройство в базе
-	if err := svc.ds.Save(ctx, deviceUUID, user.UserUUID, publicKey); err != nil {
-		return uuid.Nil, err
+	err = s.deviceWriteRepo.Save(ctx, deviceUUID, user.UserUUID, publicKey)
+	if err != nil {
+		deviceUUID = uuid.Nil
+		return
 	}
-
-	return deviceUUID, nil
+	return
 }
 
-// Login проверяет учетные данные пользователя и выдает JWT для конкретного устройства.
-// Для входа клиент передает username, password и deviceUUID.
-// Если пароль неверный или пользователя нет, возвращает ErrInvalidCredentials.
-// Login проверяет учетные данные пользователя и выдает JWT для конкретного устройства.
-// Проверяет, что устройство существует и принадлежит пользователю.
-// Если пароль неверный, устройство не найдено или пользователь не существует, возвращает ErrInvalidCredentials.
-func (svc *AuthService) Login(
-	ctx context.Context,
-	username string,
-	password string,
-	deviceUUID uuid.UUID,
-) (token string, err error) {
-	// Находим пользователя
-	user, err := svc.ug.Get(ctx, username)
+// Login проверяет логин и пароль, возвращает JWT токен
+func (s *AuthService) Login(ctx context.Context, username, password string, deviceUUID uuid.UUID) (tokenString string, err error) {
+	var user *models.UserDB
+	user, err = s.userReadRepo.GetByUsername(ctx, username)
 	if err != nil {
-		return "", err
+		return
 	}
 	if user == nil {
-		return "", ErrInvalidCredentials
+		err = ErrUserNotFound
+		return
 	}
 
-	// Проверяем пароль
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return "", ErrInvalidCredentials
-	}
-
-	// Проверяем устройство
-	device, err := svc.dg.Get(ctx, deviceUUID)
+	var device *models.DeviceDB
+	device, err = s.deviceReadRepo.Get(ctx, deviceUUID)
 	if err != nil {
-		return "", err
+		return
 	}
-	if device == nil || device.UserUUID != user.UserUUID {
-		return "", ErrInvalidCredentials
-	}
-
-	// Генерируем JWT для указанного устройства
-	token, err = svc.tg.Generate(user.UserUUID, deviceUUID)
-	if err != nil {
-		return "", err
+	if device == nil {
+		err = ErrDeviceNotFound
+		return
 	}
 
-	return token, nil
+	if err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		err = ErrInvalidCredential
+		return
+	}
+
+	tokenString, err = s.tokenGen.Generate(user.UserUUID, deviceUUID)
+	return
 }
