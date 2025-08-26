@@ -52,7 +52,7 @@ func TestUserRepositories(t *testing.T) {
 	assert.NoError(t, err, "expected no error saving user")
 
 	// --- Test GetByUsername ---
-	userByName, err := userReadRepo.Get(ctx, username)
+	userByName, err := userReadRepo.GetByUsername(ctx, username)
 	assert.NoError(t, err)
 	assert.NotNil(t, userByName)
 	assert.Equal(t, username, userByName.Username)
@@ -64,13 +64,13 @@ func TestUserRepositories(t *testing.T) {
 	err = userWriteRepo.Save(ctx, userUUID, username, newPassword)
 	assert.NoError(t, err)
 
-	updatedUser, err := userReadRepo.Get(ctx, username)
+	updatedUser, err := userReadRepo.GetByUsername(ctx, username)
 	assert.NoError(t, err)
 	assert.NotNil(t, updatedUser)
 	assert.Equal(t, newPassword, updatedUser.Password)
 
 	// --- Test Get non-existent user ---
-	nonUser, err := userReadRepo.Get(ctx, "bob")
+	nonUser, err := userReadRepo.GetByUsername(ctx, "bob")
 	assert.NoError(t, err)
 	assert.Nil(t, nonUser)
 }
@@ -92,9 +92,40 @@ func TestUserWriteRepository_Conflict_Update(t *testing.T) {
 	err = userWriteRepo.Save(ctx, userUUID, "alice2", "pass2")
 	assert.NoError(t, err)
 
-	user, err := userReadRepo.Get(ctx, "alice2")
+	user, err := userReadRepo.GetByUsername(ctx, "alice2")
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 	assert.Equal(t, "pass2", user.Password)
 	assert.Equal(t, userUUID, user.UserUUID)
+}
+
+func TestUserReadRepository_GetByUUID(t *testing.T) {
+	ctx := context.Background()
+	db := setupTestDB(t)
+	defer db.Close()
+
+	userWriteRepo := repositories.NewUserWriteRepository(db)
+	userReadRepo := repositories.NewUserReadRepository(db)
+
+	userUUID := uuid.New()
+	username := "charlie"
+	password := "mypassword"
+
+	// Save user
+	err := userWriteRepo.Save(ctx, userUUID, username, password)
+	assert.NoError(t, err)
+
+	// --- Test GetByUUID ---
+	user, err := userReadRepo.GetByUUID(ctx, userUUID)
+	assert.NoError(t, err)
+	assert.NotNil(t, user)
+	assert.Equal(t, username, user.Username)
+	assert.Equal(t, password, user.Password)
+	assert.Equal(t, userUUID, user.UserUUID)
+
+	// --- Test GetByUUID non-existent ---
+	nonExistentUUID := uuid.New()
+	user, err = userReadRepo.GetByUUID(ctx, nonExistentUUID)
+	assert.NoError(t, err)
+	assert.Nil(t, user)
 }

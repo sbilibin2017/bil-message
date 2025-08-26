@@ -33,7 +33,7 @@ func TestAuthClient_AddDevice(t *testing.T) {
 	expectedUUID := uuid.New()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/auth/device" {
+		if r.URL.Path != "/auth/device/add" {
 			t.Errorf("unexpected URL path: %s", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)

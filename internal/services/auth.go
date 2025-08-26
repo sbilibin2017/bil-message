@@ -24,7 +24,7 @@ type UserWriter interface {
 
 // UserReader интерфейс для чтения пользователей из БД
 type UserReader interface {
-	Get(ctx context.Context, username string) (*models.UserDB, error)
+	GetByUsername(ctx context.Context, username string) (*models.UserDB, error)
 }
 
 // DeviceWriter интерфейс для записи устройств в БД
@@ -71,7 +71,7 @@ func NewAuthService(
 // Register создаёт нового пользователя
 func (s *AuthService) Register(ctx context.Context, username, password string) (userUUID uuid.UUID, err error) {
 	var user *models.UserDB
-	user, err = s.userReadRepo.Get(ctx, username)
+	user, err = s.userReadRepo.GetByUsername(ctx, username)
 	if err != nil {
 		return
 	}
@@ -94,7 +94,7 @@ func (s *AuthService) Register(ctx context.Context, username, password string) (
 // AddDevice добавляет новое устройство для пользователя по username/password
 func (s *AuthService) AddDevice(ctx context.Context, username, password, publicKey string) (deviceUUID uuid.UUID, err error) {
 	var user *models.UserDB
-	user, err = s.userReadRepo.Get(ctx, username)
+	user, err = s.userReadRepo.GetByUsername(ctx, username)
 	if err != nil {
 		return
 	}
@@ -120,7 +120,7 @@ func (s *AuthService) AddDevice(ctx context.Context, username, password, publicK
 // Login проверяет логин и пароль, возвращает JWT токен
 func (s *AuthService) Login(ctx context.Context, username, password string, deviceUUID uuid.UUID) (tokenString string, err error) {
 	var user *models.UserDB
-	user, err = s.userReadRepo.Get(ctx, username)
+	user, err = s.userReadRepo.GetByUsername(ctx, username)
 	if err != nil {
 		return
 	}

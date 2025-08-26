@@ -1,4 +1,4 @@
--- +migrate Up
+-- +goose Up
 CREATE TABLE users (
     user_uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     username TEXT NOT NULL UNIQUE,
@@ -7,5 +7,5 @@ CREATE TABLE users (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
--- +migrate Down
+-- +goose Down
 DROP TABLE IF EXISTS users;

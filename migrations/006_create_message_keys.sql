@@ -1,4 +1,4 @@
--- +migrate Up
+-- +goose Up
 CREATE TABLE message_keys (
     message_key_uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_uuid UUID NOT NULL REFERENCES messages(message_uuid) ON DELETE CASCADE,
@@ -8,5 +8,5 @@ CREATE TABLE message_keys (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
--- +migrate Down
+-- +goose Down
 DROP TABLE IF EXISTS message_keys;

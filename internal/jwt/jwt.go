@@ -2,6 +2,8 @@ package jwt
 
 import (
 	"errors"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -103,4 +105,20 @@ func (j *JWT) Parse(tokenString string) (userUUID uuid.UUID, deviceUUID uuid.UUI
 	}
 
 	return userUUID, deviceUUID, nil
+}
+
+// GetFromRequest извлекает JWT из HTTP-запроса.
+func (j *JWT) GetFromRequest(r *http.Request) (tokenString string, err error) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		return "", errors.New("authorization header is missing")
+	}
+
+	parts := strings.SplitN(authHeader, " ", 2)
+	if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+		return "", errors.New("invalid authorization header format")
+	}
+
+	tokenString = parts[1]
+	return
 }

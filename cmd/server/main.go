@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -15,6 +16,17 @@ import (
 	"github.com/sbilibin2017/bil-message/internal/services"
 )
 
+// Build info, set via -ldflags
+var (
+	buildVersion = "N/A"
+	buildCommit  = "N/A"
+	buildDate    = "N/A"
+)
+
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\nCommit: %s\nDate: %s\n", buildVersion, buildCommit, buildDate)
+}
+
 var (
 	addr           string
 	version        string = "/api/v1"
@@ -24,15 +36,17 @@ var (
 	jwtExp         int
 )
 
-func init() {
+func parseFlags() {
 	flag.StringVar(&addr, "addr", ":8080", "HTTP server address")
 	flag.StringVar(&databaseDSN, "database-dsn", "", "Database DSN (connection string)")
 	flag.StringVar(&jwtSecretKey, "jwt-secret", "secret-key", "JWT secret key")
 	flag.IntVar(&jwtExp, "jwt-exp", 1, "JWT expiration duration in hours")
+	flag.Parse()
 }
 
 func main() {
-	flag.Parse()
+	printBuildInfo()
+	parseFlags()
 
 	err := run(
 		context.Background(),
@@ -75,6 +89,10 @@ func run(
 	userReadRepo := repositories.NewUserReadRepository(db)
 	deviceWriteRepo := repositories.NewDeviceWriteRepository(db)
 	deviceReadRepo := repositories.NewDeviceReadRepository(db)
+	roomWriteRepo := repositories.NewRoomWriteRepository(db)
+	roomReadRepo := repositories.NewRoomReadRepository(db)
+	roomMemberWriteRepo := repositories.NewRoomMemberWriteRepository(db)
+	roomMemberReadRepo := repositories.NewRoomMemberReadRepository(db)
 
 	// JWT генератор
 	jwt, err := jwt.New(
@@ -94,14 +112,40 @@ func run(
 		jwt,
 	)
 
+	// Сервис комнат
+	roomSvc := services.NewRoomService(
+		roomWriteRepo,
+		roomReadRepo,
+		roomMemberWriteRepo,
+		roomMemberReadRepo,
+		userReadRepo,
+	)
+
+	// Инициализация обработчиков
+	registerHandler := handlers.NewRegisterHandler(authSvc)
+	deviceAddHandler := handlers.NewDeviceAddHandler(authSvc)
+	loginHandler := handlers.NewLoginHandler(authSvc)
+
+	roomCreateHandler := handlers.NewRoomCreateHandler(roomSvc, jwt)
+	roomDeleteHandler := handlers.NewRoomDeleteHandler(roomSvc, jwt)
+	roomMemberAddHandler := handlers.NewRoomMemberAddHandler(roomSvc, jwt)
+	roomMemberRemoveHandler := handlers.NewRoomMemberRemoveHandler(roomSvc, jwt)
+
 	// Chi роутер
 	r := chi.NewRouter()
 
-	// Группа роутов: /{version}/auth
-	r.Route(version+"/auth", func(r chi.Router) {
-		r.Post("/register", handlers.NewRegisterHandler(authSvc))
-		r.Post("/device", handlers.NewAddDeviceHandler(authSvc))
-		r.Post("/login", handlers.NewLoginHandler(authSvc))
+	// Группа роутов: /{version}
+	r.Route(version, func(r chi.Router) {
+		// Auth
+		r.Post("/auth/register", registerHandler)
+		r.Post("/auth/device/add", deviceAddHandler)
+		r.Post("/auth/login", loginHandler)
+
+		// Rooms
+		r.Post("/rooms", roomCreateHandler)
+		r.Delete("/rooms/{room-uuid}", roomDeleteHandler)
+		r.Post("/rooms/{room-uuid}/{member-uuid}", roomMemberAddHandler)
+		r.Post("/rooms/{room-uuid}/{member-uuid}", roomMemberRemoveHandler)
 	})
 
 	srv := &http.Server{

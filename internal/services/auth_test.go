@@ -57,7 +57,7 @@ func TestAuthService_Register(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockUserRead.EXPECT().Get(gomock.Any(), tt.username).Return(tt.mockGetUser, tt.mockErr)
+			mockUserRead.EXPECT().GetByUsername(gomock.Any(), tt.username).Return(tt.mockGetUser, tt.mockErr)
 			if tt.mockGetUser == nil && tt.mockErr == nil {
 				mockUserWrite.EXPECT().Save(gomock.Any(), gomock.Any(), tt.username, gomock.Any()).Return(nil)
 			}
@@ -141,7 +141,7 @@ func TestAuthService_Login(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockUserRead.EXPECT().Get(gomock.Any(), tt.username).Return(tt.mockUser, nil)
+			mockUserRead.EXPECT().GetByUsername(gomock.Any(), tt.username).Return(tt.mockUser, nil)
 			if tt.mockUser != nil {
 				mockDeviceRead.EXPECT().Get(gomock.Any(), tt.deviceUUID).Return(tt.mockDevice, nil)
 			}
@@ -227,7 +227,7 @@ func TestAuthService_AddDevice(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockUserRead.EXPECT().Get(gomock.Any(), tt.username).Return(tt.mockUser, tt.mockGetErr)
+			mockUserRead.EXPECT().GetByUsername(gomock.Any(), tt.username).Return(tt.mockUser, tt.mockGetErr)
 			if tt.mockUser != nil && tt.mockGetErr == nil && tt.wantErr == nil {
 				mockDeviceWrite.EXPECT().Save(gomock.Any(), gomock.Any(), tt.mockUser.UserUUID, tt.publicKey).Return(nil)
 			} else if tt.mockUser != nil && tt.mockGetErr == nil && tt.mockSaveErr != nil {

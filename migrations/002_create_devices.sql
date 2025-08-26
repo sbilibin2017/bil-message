@@ -1,4 +1,4 @@
--- +migrate Up
+-- +goose Up
 CREATE TABLE devices (
     device_uuid UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_uuid UUID NOT NULL REFERENCES users(user_uuid) ON DELETE CASCADE,
@@ -7,5 +7,5 @@ CREATE TABLE devices (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
 );
 
--- +migrate Down
+-- +goose Down
 DROP TABLE IF EXISTS devices;

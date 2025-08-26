@@ -73,19 +73,19 @@ func (m *MockUserReader) EXPECT() *MockUserReaderMockRecorder {
 	return m.recorder
 }
 
-// Get mocks base method.
-func (m *MockUserReader) Get(ctx context.Context, username string) (*models.UserDB, error) {
+// GetByUsername mocks base method.
+func (m *MockUserReader) GetByUsername(ctx context.Context, username string) (*models.UserDB, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", ctx, username)
+	ret := m.ctrl.Call(m, "GetByUsername", ctx, username)
 	ret0, _ := ret[0].(*models.UserDB)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// Get indicates an expected call of Get.
-func (mr *MockUserReaderMockRecorder) Get(ctx, username interface{}) *gomock.Call {
+// GetByUsername indicates an expected call of GetByUsername.
+func (mr *MockUserReaderMockRecorder) GetByUsername(ctx, username interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockUserReader)(nil).Get), ctx, username)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByUsername", reflect.TypeOf((*MockUserReader)(nil).GetByUsername), ctx, username)
 }
 
 // MockDeviceWriter is a mock of DeviceWriter interface.

@@ -8,45 +8,68 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-resty/resty/v2"
 	"github.com/google/uuid"
 	"github.com/sbilibin2017/bil-message/internal/client"
 )
 
+// Build info, set via -ldflags
 var (
-	serverURL string
-	username  string
-	password  string
-	publicKey string
+	buildVersion = "N/A"
+	buildCommit  = "N/A"
+	buildDate    = "N/A"
+)
+
+func printBuildInfo() {
+	fmt.Printf("Build version: %s\nCommit: %s\nDate: %s\n", buildVersion, buildCommit, buildDate)
+}
+
+var (
+	serverURL  string
+	username   string
+	password   string
+	publicKey  string
+	token      string
+	roomUUID   string
+	memberUUID string
 )
 
 const deviceUUIDFile = ".config/device_uuid"
 
-func init() {
+func parseFlags() {
 	flag.StringVar(&serverURL, "url", "http://localhost:8080/api/v1", "Base URL of the auth server")
 	flag.StringVar(&username, "username", "", "Username")
 	flag.StringVar(&password, "password", "", "Password")
 	flag.StringVar(&publicKey, "public-key", "", "Public key for device")
+	flag.StringVar(&token, "token", "", "JWT token for auth")
+	flag.StringVar(&roomUUID, "room-uuid", "", "Room UUID")
+	flag.StringVar(&memberUUID, "member-uuid", "", "Member UUID")
 }
 
 func main() {
-	flag.Parse()
+	parseFlags()
 
 	if len(os.Args) < 2 {
-		log.Fatalln("Commands: register, add-device, login")
+		log.Fatalln("Commands: register, add-device, login, create-room, delete-room, add-room-member, remove-room-member")
 	}
 
 	command := os.Args[1]
-
-	authClient := client.NewAuthClient(serverURL)
 	ctx := context.Background()
+	authClient := client.NewAuthClient(serverURL)
+	restyClient := resty.New()
+	roomClient := client.NewRoomClient(restyClient)
 
 	switch command {
+
+	case "version":
+		printBuildInfo()
+
 	case "register":
 		userUUID, err := authClient.Register(ctx, username, password)
 		if err != nil {
 			log.Fatalf("Register failed: %v", err)
 		}
-		log.Println(userUUID)
+		log.Println("User UUID:", userUUID)
 
 	case "add-device":
 		deviceUUID, err := authClient.AddDevice(ctx, username, password, publicKey)
@@ -56,7 +79,7 @@ func main() {
 		if err := saveDeviceUUID(deviceUUID); err != nil {
 			log.Fatalf("Failed to save device UUID: %v", err)
 		}
-		log.Println(deviceUUID)
+		log.Println("Device UUID:", deviceUUID)
 
 	case "login":
 		deviceUUID, err := loadDeviceUUID()
@@ -67,31 +90,52 @@ func main() {
 		if err != nil {
 			log.Fatalf("Login failed: %v", err)
 		}
-		log.Println(token)
+		log.Println("JWT token:", token)
+
+	case "create-room":
+		roomID, err := roomClient.CreateRoom(ctx, token)
+		if err != nil {
+			log.Fatalf("Create room failed: %v", err)
+		}
+		log.Println(roomID)
+
+	case "delete-room":
+		rUUID, err := uuid.Parse(roomUUID)
+		if err != nil {
+			log.Fatalf("Invalid room UUID: %v", err)
+		}
+		if err := roomClient.DeleteRoom(ctx, token, rUUID); err != nil {
+			log.Fatalf("Delete room failed: %v", err)
+		}
+
+	case "add-room-member":
+		rUUID, _ := uuid.Parse(roomUUID)
+		mUUID, _ := uuid.Parse(memberUUID)
+		if err := roomClient.AddMember(ctx, token, rUUID, mUUID); err != nil {
+			log.Fatalf("Add member failed: %v", err)
+		}
+
+	case "remove-room-member":
+		rUUID, _ := uuid.Parse(roomUUID)
+		mUUID, _ := uuid.Parse(memberUUID)
+		if err := roomClient.RemoveMember(ctx, token, rUUID, mUUID); err != nil {
+			log.Fatalf("Remove member failed: %v", err)
+		}
 
 	default:
-		fmt.Printf("Unknown command: %s\n", command)
-		os.Exit(1)
+		log.Fatalf("Unknown command: %s\n", command)
 	}
 }
 
 func saveDeviceUUID(id uuid.UUID) error {
-	configDir, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
+	configDir, _ := os.UserHomeDir()
 	path := filepath.Join(configDir, deviceUUIDFile)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	return os.WriteFile(path, []byte(id.String()), 0o600)
 }
 
 func loadDeviceUUID() (uuid.UUID, error) {
-	configDir, err := os.UserHomeDir()
-	if err != nil {
-		return uuid.Nil, err
-	}
+	configDir, _ := os.UserHomeDir()
 	path := filepath.Join(configDir, deviceUUIDFile)
 	data, err := os.ReadFile(path)
 	if err != nil {

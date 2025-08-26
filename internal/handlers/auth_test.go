@@ -111,7 +111,7 @@ func TestAddDeviceHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/auth/device", bytes.NewReader(body))
 			w := httptest.NewRecorder()
 
-			NewAddDeviceHandler(mockSvc)(w, req)
+			NewDeviceAddHandler(mockSvc)(w, req)
 
 			assert.Equal(t, tt.expectedStatus, w.Code)
 			if w.Code == http.StatusOK {

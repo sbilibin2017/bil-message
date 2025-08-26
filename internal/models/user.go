@@ -6,10 +6,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// UserDB представляет пользователя в бд.
 type UserDB struct {
-	UserUUID  uuid.UUID `db:"user_uuid"`
-	Username  string    `db:"username"`
-	Password  string    `db:"password"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	UserUUID  uuid.UUID `json:"user_uuid" db:"user_uuid"`
+	Username  string    `json:"username" db:"username"`
+	Password  string    `json:"password" db:"password"`
+	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 }

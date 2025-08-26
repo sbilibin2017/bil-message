@@ -60,7 +60,7 @@ func (c *AuthClient) AddDevice(ctx context.Context, username, password, publicKe
 		SetContext(ctx).
 		SetHeader("Content-Type", "application/json").
 		SetBody(reqBody).
-		Post(c.baseURL + "/auth/device")
+		Post(c.baseURL + "/auth/device/add")
 	if err != nil {
 		return uuid.Nil, err
 	}

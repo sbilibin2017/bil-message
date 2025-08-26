@@ -93,7 +93,7 @@ type AddDeviceRequest struct {
 	PublicKey string `json:"public_key"`
 }
 
-// NewAddDeviceHandler
+// NewDeviceAddHandler
 // @Summary Добавление нового устройства
 // @Description Привязывает новое устройство к пользователю и возвращает UUID устройства
 // @Tags Auth
@@ -106,7 +106,7 @@ type AddDeviceRequest struct {
 // @Failure 404 "Пользователь не найден"
 // @Failure 500 "Внутренняя ошибка сервера"
 // @Router /auth/device [post]
-func NewAddDeviceHandler(svc DeviceAdder) http.HandlerFunc {
+func NewDeviceAddHandler(svc DeviceAdder) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req AddDeviceRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
