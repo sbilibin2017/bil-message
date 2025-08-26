@@ -2,10 +2,15 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	"github.com/nats-io/nats.go"
+	"github.com/sbilibin2017/bil-message/internal/models"
 	"github.com/sbilibin2017/bil-message/internal/services"
 )
 
@@ -231,5 +236,79 @@ func NewRoomMemberRemoveHandler(svc RoomMemberRemover, tokenParser TokenParser) 
 		}
 
 		w.WriteHeader(http.StatusOK)
+	}
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true }, // разрешаем подключение с любого origin
+}
+
+// NewRoomWebsocketHandler
+// @Summary Подключение к комнате через WebSocket
+// @Description Устанавливает WebSocket-соединение для отправки сообщений в комнату.
+// Пользователь аутентифицируется через JWT токен, передаваемый в заголовке Authorization.
+// Сообщения пользователя публикуются в NATS на тему "room.messages".
+// @Tags Room
+// @Accept json
+// @Produce json
+// @Param room-uuid path string true "UUID комнаты"
+// @Param Authorization header string true "JWT токен пользователя"
+// @Success 101 "WebSocket соединение установлено"
+// @Failure 400 "Некорректные данные запроса или UUID"
+// @Failure 401 "Неверный токен"
+// @Failure 500 "Внутренняя ошибка сервера"
+// @Router /room/{room-uuid}/ws [get]
+func NewRoomWebsocketHandler(tokenParser TokenParser, nc *nats.Conn) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		roomUUID, err := uuid.Parse(chi.URLParam(r, "room-uuid"))
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		tokenStr, err := tokenParser.GetFromRequest(r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		userUUID, _, err := tokenParser.Parse(tokenStr)
+		if err != nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		defer conn.Close()
+
+		for {
+			var msg struct {
+				Message string `json:"message"`
+			}
+
+			if err := conn.ReadJSON(&msg); err != nil {
+				break
+			}
+
+			chatMsg := models.RoomMessage{
+				RoomUUID:  roomUUID,
+				UserUUID:  userUUID,
+				Message:   msg.Message,
+				Timestamp: time.Now().Unix(),
+			}
+
+			data, err := json.Marshal(chatMsg)
+			if err != nil {
+				continue
+			}
+
+			if err := nc.Publish("room.messages", data); err != nil {
+				continue
+			}
+		}
 	}
 }

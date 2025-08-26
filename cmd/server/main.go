@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/nats-io/nats.go"
 	"github.com/sbilibin2017/bil-message/internal/db"
 	"github.com/sbilibin2017/bil-message/internal/handlers"
 	"github.com/sbilibin2017/bil-message/internal/jwt"
@@ -33,14 +34,16 @@ var (
 	databaseDriver string = "pgx"
 	databaseDSN    string
 	jwtSecretKey   string
-	jwtExp         int
+	jwtExp         time.Duration
+	natsURL        string
 )
 
 func parseFlags() {
-	flag.StringVar(&addr, "addr", ":8080", "HTTP server address")
-	flag.StringVar(&databaseDSN, "database-dsn", "", "Database DSN (connection string)")
-	flag.StringVar(&jwtSecretKey, "jwt-secret", "secret-key", "JWT secret key")
-	flag.IntVar(&jwtExp, "jwt-exp", 1, "JWT expiration duration in hours")
+	flag.StringVar(&addr, "a", ":8080", "HTTP server address")
+	flag.StringVar(&databaseDSN, "d", "postgres://user:password@localhost:5432/db?sslmode=disable", "Database DSN (connection string)")
+	flag.StringVar(&jwtSecretKey, "k", "secret-key", "JWT secret key")
+	flag.DurationVar(&jwtExp, "e", time.Duration(1)*time.Hour, "JWT expiration duration in hours")
+	flag.StringVar(&natsURL, "n", nats.DefaultURL, "NATS server URL")
 	flag.Parse()
 }
 
@@ -56,6 +59,7 @@ func main() {
 		databaseDSN,
 		jwtSecretKey,
 		jwtExp,
+		natsURL,
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -70,8 +74,16 @@ func run(
 	databaseDriver string,
 	databaseDSN string,
 	jwtSecretKey string,
-	jwtExp int,
+	jwtExp time.Duration,
+	natsURL string,
 ) error {
+	// Подключение к NATS
+	nc, err := nats.Connect(natsURL)
+	if err != nil {
+		return err
+	}
+	defer nc.Close()
+
 	// Подключение к базе данных
 	db, err := db.New(
 		databaseDriver,
@@ -87,17 +99,20 @@ func run(
 	// Репозитории
 	userWriteRepo := repositories.NewUserWriteRepository(db)
 	userReadRepo := repositories.NewUserReadRepository(db)
+
 	deviceWriteRepo := repositories.NewDeviceWriteRepository(db)
 	deviceReadRepo := repositories.NewDeviceReadRepository(db)
+
 	roomWriteRepo := repositories.NewRoomWriteRepository(db)
 	roomReadRepo := repositories.NewRoomReadRepository(db)
+
 	roomMemberWriteRepo := repositories.NewRoomMemberWriteRepository(db)
 	roomMemberReadRepo := repositories.NewRoomMemberReadRepository(db)
 
 	// JWT генератор
 	jwt, err := jwt.New(
 		jwt.WithSecretKey(jwtSecretKey),
-		jwt.WithExpiration(time.Duration(jwtExp)*time.Hour),
+		jwt.WithExpiration(jwtExp),
 	)
 	if err != nil {
 		return err
@@ -130,6 +145,7 @@ func run(
 	roomDeleteHandler := handlers.NewRoomDeleteHandler(roomSvc, jwt)
 	roomMemberAddHandler := handlers.NewRoomMemberAddHandler(roomSvc, jwt)
 	roomMemberRemoveHandler := handlers.NewRoomMemberRemoveHandler(roomSvc, jwt)
+	roomWSHandler := handlers.NewRoomWebsocketHandler(jwt, nc)
 
 	// Chi роутер
 	r := chi.NewRouter()
@@ -146,6 +162,7 @@ func run(
 		r.Delete("/rooms/{room-uuid}", roomDeleteHandler)
 		r.Post("/rooms/{room-uuid}/{member-uuid}", roomMemberAddHandler)
 		r.Post("/rooms/{room-uuid}/{member-uuid}", roomMemberRemoveHandler)
+		r.Get("/room/{room-uuid}/ws", roomWSHandler)
 	})
 
 	srv := &http.Server{
